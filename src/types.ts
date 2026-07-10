@@ -62,6 +62,7 @@ export interface Order {
   
   token: string | null;
   recetaUrl?: string; // We'll mock the URL for the MVP
+  diagnostico?: string;
   
   medicamentos: MedicationRequest[];
   productosAdicionales: any[];

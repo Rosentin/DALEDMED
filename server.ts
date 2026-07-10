@@ -24,6 +24,52 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage = 'Timeout
   ]);
 }
 
+function detectMimeType(buffer: Buffer, originalName: string, reportedMimeType: string): string {
+  // If the reported mime type is a standard image/pdf, trust it
+  if (reportedMimeType && 
+      reportedMimeType !== 'application/octet-stream' && 
+      reportedMimeType !== 'application/x-download' &&
+      reportedMimeType !== 'binary/octet-stream') {
+    return reportedMimeType;
+  }
+
+  // Check magic numbers
+  if (buffer.length >= 4) {
+    // PDF: %PDF
+    if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+      return 'application/pdf';
+    }
+    // PNG: \x89PNG
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      return 'image/png';
+    }
+  }
+  if (buffer.length >= 3) {
+    // JPEG: \xFF\xD8\xFF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      return 'image/jpeg';
+    }
+  }
+  if (buffer.length >= 12) {
+    // WebP: RIFFxxxxWEBP
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+        buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+      return 'image/webp';
+    }
+  }
+
+  // Fallback to extension check
+  const ext = path.extname(originalName || '').toLowerCase();
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.heic') return 'image/heic';
+  if (ext === '.heif') return 'image/heif';
+
+  return 'image/jpeg'; // Final default fallback
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -101,7 +147,7 @@ async function startServer() {
         return res.status(400).json({ error: 'No prompt provided' });
       }
 
-      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'];
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
       let response;
       let lastError: any = null;
 
@@ -178,9 +224,9 @@ async function startServer() {
       }
 
       // Detect mime type
-      const mimeType = req.file.mimetype;
       const fileData = fs.readFileSync(req.file.path);
-            const prompt = `
+      const mimeType = detectMimeType(fileData, req.file.originalname, req.file.mimetype);
+      const prompt = `
         Analiza esta receta médica y extrae la siguiente información en formato JSON estrictamente:
         - nombrePaciente (string o null si no figura)
         - dni (string o null)
@@ -199,7 +245,7 @@ async function startServer() {
         Solo devuelve JSON, ninguna otra respuesta.
       `;
 
-      const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-flash-latest'];
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
       let response;
       let lastError: any = null;
 

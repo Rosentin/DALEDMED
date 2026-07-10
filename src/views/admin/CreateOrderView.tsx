@@ -23,6 +23,7 @@ export default function CreateOrderView() {
   const [medico, setMedico] = useState('');
   const [matriculaMedico, setMatriculaMedico] = useState('');
   const [token, setToken] = useState('');
+  const [diagnostico, setDiagnostico] = useState('');
   const [medicamentos, setMedicamentos] = useState<MedicationRequest[]>([]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,6 +93,7 @@ export default function CreateOrderView() {
           if (data.numeroAfiliado) setNumeroAfiliado(data.numeroAfiliado);
           if (data.medicoPrescriptor) setMedico(data.medicoPrescriptor);
           if (data.matricula) setMatriculaMedico(data.matricula);
+          if (data.diagnostico) setDiagnostico(data.diagnostico);
           
           if (data.medicamentos && Array.isArray(data.medicamentos)) {
             setMedicamentos(data.medicamentos.map((m: any) => {
@@ -143,6 +145,7 @@ export default function CreateOrderView() {
       matriculaMedico,
       token,
       medicamentos,
+      diagnostico,
       estado: 'Revisión Farmacéutica'
     });
     
@@ -226,6 +229,7 @@ export default function CreateOrderView() {
                   <Input label="Médico" value={medico} onChange={e => setMedico(e.target.value)} />
                   <Input label="Matrícula" value={matriculaMedico} onChange={e => setMatriculaMedico(e.target.value)} />
                   <Input label="Token (Dictado)" value={token} onChange={e => setToken(e.target.value)} required />
+                  <Input label="Diagnóstico" value={diagnostico} onChange={e => setDiagnostico(e.target.value)} />
                 </div>
                 
                 <div>

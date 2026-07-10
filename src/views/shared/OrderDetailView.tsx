@@ -981,6 +981,12 @@ export default function OrderDetailView() {
                 <p className="text-slate-500 text-xs uppercase tracking-wider font-bold mb-1">Token de Validación</p>
                 <p className="font-mono text-2xl font-bold tracking-widest text-slate-900">{order.token || 'N/A'}</p>
               </div>
+              {order.diagnostico && (
+                <div className="col-span-2 bg-blue-50/30 p-3 rounded-lg border border-blue-100/50">
+                  <p className="text-blue-700 text-[10px] uppercase tracking-wider font-bold mb-0.5">Diagnóstico Extraído / Registrado</p>
+                  <p className="font-semibold text-blue-900 text-sm">{order.diagnostico}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1181,7 +1187,7 @@ export default function OrderDetailView() {
                               <span className="font-bold text-purple-600">-${(med.descuentoAdicional || 0).toLocaleString()}</span>
                             </div>
                             <div className="border-l border-slate-200 pl-2">
-                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px] block mb-0.5">Costo Farmacia</span>
+                              <span className="text-slate-500 font-bold uppercase tracking-wider text-[8px] block mb-0.5">Costo</span>
                               <span className="font-bold text-blue-600">${(med.costoFarmacia || 0).toLocaleString()}</span>
                             </div>
                           </div>
@@ -1190,13 +1196,17 @@ export default function OrderDetailView() {
 
                       {(med.validado || (med.precioLista !== undefined && med.precioLista > 0)) ? (
                         <div className="text-right shrink-0">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none mb-1">Precio Paciente</span>
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block leading-none mb-1">
+                            {isPharma ? "Costo" : "Precio Paciente"}
+                          </span>
                           <p className="font-black text-slate-900 text-xl tracking-tight leading-none mb-1">
-                            ${(med.precioFinal || 0).toLocaleString()}
+                            ${(isPharma ? (med.costoFarmacia || 0) : (med.precioFinal || 0)).toLocaleString()}
                           </p>
-                          <p className="text-[10px] font-mono font-bold tracking-tight text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 inline-block">
-                            MRG: {med.margenAplicado}%
-                          </p>
+                          {!isPharma && (
+                            <p className="text-[10px] font-mono font-bold tracking-tight text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 inline-block">
+                              MRG: {med.margenAplicado}%
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <Badge variant="warning">Pendiente</Badge>
@@ -1209,7 +1219,7 @@ export default function OrderDetailView() {
           </Card>
 
           {/* Moved Resumen de Cotización (Position 1) */}
-          {(order.estado === 'Cotizado' || order.estado === 'Pago Pendiente' || order.estado === 'Pagado' || order.estado === 'En preparación' || order.estado === 'En reparto' || order.estado === 'Entregado') && (isAdmin || isPharma) && (
+          {(order.estado === 'Cotizado' || order.estado === 'Pago Pendiente' || order.estado === 'Pagado' || order.estado === 'En preparación' || order.estado === 'En reparto' || order.estado === 'Entregado') && isAdmin && !isPharma && (
              <div className="bg-slate-900 rounded-xl p-6 text-white shadow-lg border border-slate-800">
                 <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Resumen de Cotización</h3>
                 
