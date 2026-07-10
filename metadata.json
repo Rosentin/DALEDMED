@@ -1,0 +1,10 @@
+{
+  "name": "Remix: DALEDMED2",
+  "description": "HealthTech platform for digital pharmacy and medication logistics.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

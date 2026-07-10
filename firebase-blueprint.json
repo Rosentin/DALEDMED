@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["team", "admin", "pharma"] },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "permissions": { "type": "array" },
+        "email": { "type": "string" }
+      },
+      "required": ["role", "name", "code"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Patients of the system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "dni": { "type": "string" },
+        "phone": { "type": "string" },
+        "obraSocial": { "type": "string" },
+        "numeroAfiliado": { "type": "string" },
+        "address": { "type": "string" },
+        "history": { "type": "array" },
+        "consentGiven": { "type": "boolean" }
+      },
+      "required": ["name", "dni"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Medical orders.",
+      "type": "object",
+      "properties": {
+        "fecha": { "type": "string" },
+        "pacienteId": { "type": "string" },
+        "pacienteNombre": { "type": "string" },
+        "dni": { "type": "string" },
+        "numeroAfiliado": { "type": "string" },
+        "medico": { "type": "string" },
+        "matriculaMedico": { "type": "string" },
+        "consultorio": { "type": "string" },
+        "obraSocial": { "type": "string" },
+        "token": { "type": "string" },
+        "recetaUrl": { "type": "string" },
+        "medicamentos": { "type": "array" },
+        "productosAdicionales": { "type": "array" },
+        "estado": { "type": "string" },
+        "direccionEntrega": { "type": "string" },
+        "distanciaKm": { "type": "number" },
+        "costoLogistico": { "type": "number" },
+        "metodoPago": { "type": "string" },
+        "estadoPago": { "type": "string" },
+        "creadoPor": { "type": "string" },
+        "pharmaUser": { "type": "string" },
+        "historialCambios": { "type": "array" }
+      },
+      "required": ["fecha", "pacienteId", "estado", "creadoPor"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "System configuration.",
+      "type": "object",
+      "properties": {
+        "margins": { "type": "object" },
+        "baseLogisticsCost": { "type": "number" },
+        "perKmLogisticsCost": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users"
+    },
+    "/patients/{patientId}": {
+      "schema": { "$ref": "#/entities/Patient" },
+      "description": "Patients"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Orders"
+    },
+    "/config/{configId}": {
+      "schema": { "$ref": "#/entities/Config" },
+      "description": "Configuration singletons"
+    }
+  }
+}
