@@ -46,6 +46,17 @@ interface AppState {
   baseLogisticsCost: number;
   perKmLogisticsCost: number;
   googleMapsApiKey?: string;
+  mercadoPagoAccessToken?: string;
+  bankName?: string;
+  bankCbu?: string;
+  bankAlias?: string;
+  bankTitular?: string;
+  smtpHost?: string;
+  smtpPort?: string;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSendTo?: string;
   
   // Internal setters for sync
   setUsers: (users: User[]) => void;
@@ -72,7 +83,14 @@ export const ALL_PERMISSIONS = [
 ];
 
 export const useAppStore = create<AppState>((set, get) => ({
-  currentUser: null,
+  currentUser: (() => {
+    try {
+      const saved = localStorage.getItem('daledmed_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })(),
   users: [],
   orders: [],
   patients: [],
@@ -85,6 +103,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   baseLogisticsCost: 1500,
   perKmLogisticsCost: 200,
   googleMapsApiKey: '',
+  mercadoPagoAccessToken: '',
+  bankName: '',
+  bankCbu: '',
+  bankAlias: '',
+  bankTitular: '',
+  smtpHost: '',
+  smtpPort: '',
+  smtpSecure: false,
+  smtpUser: '',
+  smtpPass: '',
+  smtpSendTo: '',
 
   setUsers: (users) => set({ users }),
   setOrders: (orders) => set({ orders }),
@@ -104,6 +133,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (user) {
       set({ currentUser: user });
+      try {
+        localStorage.setItem('daledmed_user', JSON.stringify(user));
+      } catch (e) {
+        console.error(e);
+      }
       return true;
     }
     return false;
@@ -111,6 +145,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   logout: () => {
     set({ currentUser: null });
+    try {
+      localStorage.removeItem('daledmed_user');
+    } catch (e) {
+      console.error(e);
+    }
   },
 
   createOrder: (orderData) => {

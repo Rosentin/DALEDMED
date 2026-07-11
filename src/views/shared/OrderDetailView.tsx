@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck } from 'lucide-react';
+import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck, Copy, ExternalLink, QrCode, Check, Share2, Wallet, Download, Mail } from 'lucide-react';
 import { OrderState } from '../../types';
 
 const GOOGLE_MAPS_SCRIPT_ID = 'google-maps-api-script';
@@ -15,17 +15,28 @@ function loadGoogleMapsScript(apiKey: string, callback: () => void) {
     callback();
     return;
   }
-  const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
+  const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement;
   if (existingScript) {
-    existingScript.addEventListener('load', callback);
-    return;
+    const srcUrl = existingScript.src || '';
+    if (srcUrl.includes(`key=${apiKey}`)) {
+      existingScript.addEventListener('load', callback);
+      if (existingScript.dataset.loaded === 'true' || (window as any).google?.maps) {
+        callback();
+      }
+      return;
+    } else {
+      existingScript.remove();
+    }
   }
   const script = document.createElement('script');
   script.id = GOOGLE_MAPS_SCRIPT_ID;
   script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=es`;
   script.async = true;
   script.defer = true;
-  script.addEventListener('load', callback);
+  script.addEventListener('load', () => {
+    script.dataset.loaded = 'true';
+    callback();
+  });
   document.head.appendChild(script);
 }
 
@@ -136,13 +147,142 @@ export default function OrderDetailView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { orders, currentUser, updateOrder, margins, baseLogisticsCost, perKmLogisticsCost, googleMapsApiKey } = useAppStore();
+  const { 
+    orders, 
+    currentUser, 
+    updateOrder, 
+    margins, 
+    baseLogisticsCost, 
+    perKmLogisticsCost, 
+    googleMapsApiKey,
+    bankName,
+    bankCbu,
+    bankAlias,
+    bankTitular,
+    mercadoPagoAccessToken
+  } = useAppStore();
   
   const order = orders.find(o => o.id === id);
   
   const [address, setAddress] = useState(order?.direccionEntrega || '');
   const [distance, setDistance] = useState<number>(order?.distanciaKm || 0);
   const [waypoints, setWaypoints] = useState<string[]>(order?.waypoints || []);
+
+  // Payment Selection Modal States
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mp' | 'transfer' | 'cash' | null>(null);
+  const [mpSubOption, setMpSubOption] = useState<'link' | 'qr' | null>(null);
+  const [generatingPayment, setGeneratingPayment] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [isRealPayment, setIsRealPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  
+  // Receipt Email States
+  const [sendingReceiptEmail, setSendingReceiptEmail] = useState(false);
+  const [receiptEmailStatus, setReceiptEmailStatus] = useState<{ success: boolean; msg: string } | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const handleCopyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleGenerateMpPayment = async (subOption: 'link' | 'qr') => {
+    if (!order) return;
+    setGeneratingPayment(true);
+    setPaymentError(null);
+    setMpSubOption(subOption);
+    setGeneratedLink('');
+    
+    const totals = calculateTotals();
+    const returnUrl = window.location.href;
+
+    try {
+      const response = await fetch('/api/mercadopago/preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          totalAmount: totals.total,
+          returnUrl
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al conectar con el servidor.');
+      }
+
+      const data = await response.json();
+      setGeneratedLink(data.initPoint);
+      setIsRealPayment(data.isReal);
+
+      // Now update the order status to "Pago Pendiente"
+      updateOrder(order.id, {
+        estado: 'Pago Pendiente',
+        metodoPago: subOption === 'link' ? 'Link' : 'QR',
+        linkPagoUrl: data.initPoint,
+        qrString: data.initPoint,
+        detallesPago: data.isReal ? 'Mercado Pago Real' : 'Simulación de Pago',
+        estadoPago: 'Pendiente'
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      setPaymentError(err?.message || 'Error desconocido.');
+    } finally {
+      setGeneratingPayment(false);
+    }
+  };
+
+  const handleSelectTransfer = () => {
+    if (!order) return;
+    
+    const transferDetails = `${bankName || 'Banco'} | CBU: ${bankCbu || ''} | Alias: ${bankAlias || ''} | Titular: ${bankTitular || ''}`;
+    
+    updateOrder(order.id, {
+      estado: 'Pago Pendiente',
+      metodoPago: 'Transferencia',
+      bankInfoUsada: transferDetails,
+      detallesPago: `Alias: ${bankAlias || 'No especificado'}`,
+      estadoPago: 'Pendiente'
+    });
+  };
+
+  const handleSelectCash = () => {
+    if (!order) return;
+    
+    updateOrder(order.id, {
+      estado: 'En preparación',
+      metodoPago: 'Efectivo',
+      estadoPago: 'Pagado',
+      detallesPago: 'Efectivo abonado antes de envío'
+    });
+    
+    // Auto-send receipt
+    fetch(`/api/receipt/send-email/${order.id}`, { method: 'POST' })
+      .catch(e => console.error('Auto receipt failed:', e));
+
+    setIsPaymentModalOpen(false);
+  };
+
+  const getTransferWhatsAppText = (totals: any) => {
+    return `Hola! Para abonar el pedido #${order?.id} de DALEDMED por Transferencia Bancaria, estos son los datos:\n\n*Banco:* ${bankName || 'Galicia'}\n*Titular:* ${bankTitular || 'DALEDMED S.A.S.'}\n*CBU/CVU:* ${bankCbu || '0070142320000005432109'}\n*Alias:* ${bankAlias || 'daledmed.salud'}\n*Monto Total:* $${totals.total.toLocaleString()}\n\nPor favor, envíanos el comprobante de transferencia por aquí. ¡Muchas gracias!`;
+  };
+
+  useEffect(() => {
+    if (order) {
+      setAddress(order.direccionEntrega || '');
+      setDistance(order.distanciaKm || 0);
+      setWaypoints(order.waypoints || []);
+      setEmailInput(order.pacienteEmail || '');
+      setReceiptEmailStatus(null);
+    }
+  }, [order?.id, order?.pacienteEmail]);
 
   const getDeliveryMetrics = () => {
     const dLat = order?.destLat || getDeterministicMendozaCoords(order?.id || '').lat;
@@ -743,7 +883,7 @@ export default function OrderDetailView() {
         };
       }));
     }
-  }, [order]);
+  }, [order?.id]);
 
   if (!order || !currentUser) return <div>Pedido no encontrado</div>;
 
@@ -916,12 +1056,62 @@ export default function OrderDetailView() {
     });
   };
 
+  const triggerReceiptEmail = (orderId: string) => {
+    fetch(`/api/receipt/send-email/${orderId}`, {
+      method: 'POST'
+    }).then(res => res.json())
+      .then(data => {
+        console.log('Automated receipt email sent:', data);
+      })
+      .catch(err => {
+        console.error('Failed to automatically send receipt email:', err);
+      });
+  };
+
+  const handleManualSendEmail = async () => {
+    if (!order) return;
+    setSendingReceiptEmail(true);
+    setReceiptEmailStatus(null);
+    try {
+      const response = await fetch(`/api/receipt/send-email/${order.id}`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setReceiptEmailStatus({ success: true, msg: 'Comprobante enviado por email.' });
+      } else {
+        setReceiptEmailStatus({ success: false, msg: data.error || 'Error al enviar mail.' });
+      }
+    } catch (e) {
+      setReceiptEmailStatus({ success: false, msg: 'Error de red.' });
+    } finally {
+      setSendingReceiptEmail(false);
+    }
+  };
+
+  const handleSaveEmail = () => {
+    if (!order) return;
+    setSavingEmail(true);
+    try {
+      updateOrder(order.id, {
+        pacienteEmail: emailInput.trim()
+      });
+      alert('Email del paciente actualizado correctamente.');
+    } catch (err) {
+      console.error(err);
+      alert('Error al guardar el email.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const handleConfirmPayment = () => {
     updateOrder(order.id, {
       estadoPago: 'Pagado',
       estado: 'En preparación',
       metodoPago: 'Link'
     });
+    triggerReceiptEmail(order.id);
   };
 
   const calculateTotals = () => {
@@ -987,6 +1177,30 @@ export default function OrderDetailView() {
                   <p className="font-semibold text-blue-900 text-sm">{order.diagnostico}</p>
                 </div>
               )}
+              
+              <div className="col-span-2 border-t border-slate-100 pt-4 mt-2">
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Email de Contacto (Para Envío de Comprobante)</p>
+                <div className="flex gap-3 items-center max-w-md">
+                  <div className="flex-1">
+                    <Input 
+                      type="email" 
+                      placeholder="ejemplo@paciente.com" 
+                      value={emailInput} 
+                      onChange={e => setEmailInput(e.target.value)}
+                    />
+                  </div>
+                  <Button 
+                    type="button"
+                    variant="primary" 
+                    size="sm" 
+                    onClick={handleSaveEmail}
+                    disabled={savingEmail}
+                    className="whitespace-nowrap px-4 py-2 text-xs font-bold uppercase tracking-wider"
+                  >
+                    {savingEmail ? 'Guardando...' : 'Guardar Email'}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1269,7 +1483,16 @@ export default function OrderDetailView() {
                         <p className="text-xs text-slate-500 text-center">
                           Los medicamentos ya están cotizados y el costo de envío ha sido calculado. Puedes proceder a generar el vínculo de pago para el paciente.
                         </p>
-                        <Button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] uppercase tracking-wider py-3.5 shadow-lg shadow-indigo-900/40 border-none flex items-center justify-center gap-2" onClick={handleChargePatient}>
+                        <Button 
+                          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] uppercase tracking-wider py-3.5 shadow-lg shadow-indigo-900/40 border-none flex items-center justify-center gap-2" 
+                          onClick={() => {
+                            setIsPaymentModalOpen(true);
+                            setSelectedPaymentMethod(null);
+                            setMpSubOption(null);
+                            setGeneratedLink('');
+                            setPaymentError(null);
+                          }}
+                        >
                           <FileText size={14} /> Confirmar & Generar Vínculo de Pago
                         </Button>
                       </>
@@ -1284,8 +1507,27 @@ export default function OrderDetailView() {
                       Validación de Pago
                     </h4>
                     <div className="bg-amber-500/10 text-amber-600 p-3.5 rounded-lg text-xs font-semibold text-center border border-amber-500/20">
-                      Esperando pago del paciente...
+                      Esperando pago del paciente ({order.metodoPago || 'Link'})...
                     </div>
+                    <Button 
+                      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] uppercase tracking-wider py-2.5 border border-slate-200 flex items-center justify-center gap-2" 
+                      onClick={() => {
+                        setIsPaymentModalOpen(true);
+                        if (order.metodoPago === 'Link' || order.metodoPago === 'QR') {
+                          setSelectedPaymentMethod('mp');
+                          setMpSubOption(order.metodoPago === 'Link' ? 'link' : 'qr');
+                          setGeneratedLink(order.linkPagoUrl || '');
+                          setIsRealPayment(order.detallesPago === 'Mercado Pago Real');
+                        } else if (order.metodoPago === 'Transferencia') {
+                          setSelectedPaymentMethod('transfer');
+                        } else {
+                          setSelectedPaymentMethod(null);
+                        }
+                        setPaymentError(null);
+                      }}
+                    >
+                      <Info size={14} /> Ver / Copiar Datos de Pago
+                    </Button>
                     <Button variant="primary" className="w-full bg-emerald-600 hover:bg-emerald-500 border-none font-bold text-[10px] uppercase tracking-wider py-3.5 shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2" onClick={handleConfirmPayment}>
                       <CheckCircle size={14} /> Impactar Pago (Prueba de Sincronización)
                     </Button>
@@ -1306,6 +1548,44 @@ export default function OrderDetailView() {
                     
                     <div className="bg-emerald-500/10 text-emerald-700 p-3 rounded-lg font-bold text-[10px] uppercase tracking-widest text-center flex items-center justify-center gap-2 border border-emerald-500/20">
                       <CheckCircle size={14} /> Pago Acreditado ({order.metodoPago || 'LINK'})
+                    </div>
+
+                    {/* Receipts / Comprobantes section */}
+                    <div className="border-t border-slate-100 pt-4 mt-2 space-y-2 text-left">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 text-center">
+                        📄 Comprobante & Resumen
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="w-full flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider py-2 font-bold"
+                          onClick={() => window.open(`/api/receipt/pdf/${order.id}`, '_blank')}
+                        >
+                          <Download size={12} />
+                          Descargar PDF
+                        </Button>
+                        <Button 
+                          variant="primary" 
+                          size="sm" 
+                          className="w-full flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider py-2 font-bold"
+                          onClick={handleManualSendEmail}
+                          disabled={sendingReceiptEmail}
+                        >
+                          {sendingReceiptEmail ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Mail size={12} />
+                          )}
+                          Enviar Mail
+                        </Button>
+                      </div>
+
+                      {receiptEmailStatus && (
+                        <div className={`mt-2 p-2 rounded text-center text-xs font-semibold ${receiptEmailStatus.success ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'}`}>
+                          {receiptEmailStatus.msg}
+                        </div>
+                      )}
                     </div>
 
                     {/* Manual transitions requested by user */}
@@ -1745,6 +2025,361 @@ export default function OrderDetailView() {
               </CardContent>
             </Card>
           )}
+
+
+      {/* Dynamic Payment Selection Modal */}
+      {isPaymentModalOpen && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-[9px] uppercase tracking-widest text-slate-400">Asistente de Facturación y Cobro</h3>
+                <h4 className="font-extrabold text-base text-white tracking-tight">Pedido #{order.id}</h4>
+              </div>
+              <button 
+                onClick={() => setIsPaymentModalOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Total del Pedido:</span>
+                <span className="text-2xl font-black text-slate-900 tracking-tight">${totals.total.toLocaleString()}</span>
+              </div>
+
+              {/* Payment Method Selector Grid */}
+              {!selectedPaymentMethod ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500 font-bold text-center uppercase tracking-wider">Selecciona el método de cobro:</p>
+                  
+                  <button 
+                    onClick={() => {
+                      setSelectedPaymentMethod('mp');
+                      setMpSubOption(null);
+                      setGeneratedLink('');
+                    }}
+                    className="w-full flex items-center gap-4 p-4 border border-blue-100 rounded-xl hover:bg-blue-50/50 hover:border-blue-300 transition-all text-left group"
+                  >
+                    <div className="p-3 bg-blue-50 rounded-xl text-blue-600 group-hover:bg-blue-100 transition-all">
+                      <Wallet size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="font-bold text-slate-900 text-sm">Mercado Pago (Link / QR Interoperable)</h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Genera un enlace de pago oficial de Mercado Pago o un código QR interoperable.</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setSelectedPaymentMethod('transfer');
+                      handleSelectTransfer();
+                    }}
+                    className="w-full flex items-center gap-4 p-4 border border-emerald-100 rounded-xl hover:bg-emerald-50/50 hover:border-emerald-300 transition-all text-left group"
+                  >
+                    <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:bg-emerald-100 transition-all">
+                      <CreditCard size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="font-bold text-slate-900 text-sm">Transferencia Bancaria (CBU / Alias)</h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Muestra los datos bancarios configurados de la empresa para que realice la transferencia.</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setSelectedPaymentMethod('cash');
+                    }}
+                    className="w-full flex items-center gap-4 p-4 border border-amber-100 rounded-xl hover:bg-amber-50/50 hover:border-amber-300 transition-all text-left group"
+                  >
+                    <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:bg-amber-100 transition-all">
+                      <DollarSign size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="font-bold text-slate-900 text-sm">Efectivo (Pago antes del envío)</h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Acredita que el efectivo fue abonado presencialmente antes de iniciar el despacho.</p>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Back button */}
+                  <button 
+                    onClick={() => {
+                      setSelectedPaymentMethod(null);
+                      setMpSubOption(null);
+                      setGeneratedLink('');
+                    }}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    ← Volver a métodos de pago
+                  </button>
+
+                  {/* SUB VIEW: MERCADO PAGO */}
+                  {selectedPaymentMethod === 'mp' && (
+                    <div className="space-y-4">
+                      {!mpSubOption ? (
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button 
+                            onClick={() => handleGenerateMpPayment('link')}
+                            className="flex flex-col items-center justify-center p-5 border border-indigo-100 rounded-xl hover:bg-indigo-50/30 hover:border-indigo-300 transition-all text-center group"
+                          >
+                            <FileText size={32} className="text-indigo-600 mb-2 group-hover:scale-105 transition-transform" />
+                            <span className="font-bold text-slate-900 text-xs uppercase tracking-wide">Generar Link</span>
+                            <span className="text-[10px] text-slate-400 mt-1">Para enviar por WhatsApp</span>
+                          </button>
+
+                          <button 
+                            onClick={() => handleGenerateMpPayment('qr')}
+                            className="flex flex-col items-center justify-center p-5 border border-indigo-100 rounded-xl hover:bg-indigo-50/30 hover:border-indigo-300 transition-all text-center group"
+                          >
+                            <QrCode size={32} className="text-indigo-600 mb-2 group-hover:scale-105 transition-transform" />
+                            <span className="font-bold text-slate-900 text-xs uppercase tracking-wide">Generar QR</span>
+                            <span className="text-[10px] text-slate-400 mt-1">Interoperable en pantalla</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                              Mercado Pago: {mpSubOption === 'link' ? 'Link de Pago' : 'QR Interoperable'}
+                            </span>
+                            <Badge variant={isRealPayment ? "success" : "info"} className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 border-none">
+                              {isRealPayment ? "Integración Real" : "Modo Simulación"}
+                            </Badge>
+                          </div>
+
+                          {generatingPayment ? (
+                            <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                              <Loader2 className="animate-spin text-indigo-600" size={32} />
+                              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Generando preferencia en Mercado Pago...</span>
+                            </div>
+                          ) : paymentError ? (
+                            <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold text-center">
+                              ⚠️ Error: {paymentError}
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {/* If Link Sub-Option */}
+                              {mpSubOption === 'link' && generatedLink && (
+                                <div className="space-y-3">
+                                  <p className="text-xs text-slate-600">Enlace de pago generado con éxito. Cópialo y envíaselo al paciente:</p>
+                                  <div className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                                    <input 
+                                      type="text" 
+                                      readOnly 
+                                      value={generatedLink}
+                                      className="text-xs text-slate-700 bg-transparent flex-1 select-all outline-none font-mono"
+                                    />
+                                    <button 
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'link')}
+                                      className="p-2 text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+                                      title="Copiar Enlace"
+                                    >
+                                      {copiedField === 'link' ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <Button 
+                                      className="bg-indigo-600 hover:bg-indigo-500 border-none font-bold text-[10px] uppercase tracking-wider py-3 shadow-md text-white flex items-center justify-center gap-1.5"
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'link')}
+                                    >
+                                      {copiedField === 'link' ? <Check size={14} /> : <Copy size={14} />} {copiedField === 'link' ? '¡Copiado!' : 'Copiar para WhatsApp'}
+                                    </Button>
+                                    <Button 
+                                      variant="secondary"
+                                      className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3 flex items-center justify-center gap-1.5"
+                                      onClick={() => window.open(generatedLink, '_blank')}
+                                    >
+                                      <ExternalLink size={14} /> Abrir Checkout
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* If QR Sub-Option */}
+                              {mpSubOption === 'qr' && generatedLink && (
+                                <div className="space-y-4 flex flex-col items-center">
+                                  <p className="text-xs text-slate-600 text-center">Código QR de Pago listo. El paciente puede escanear este código para abrir la pasarela de Mercado Pago:</p>
+                                  
+                                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
+                                    <img 
+                                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(generatedLink)}`}
+                                      alt="Código QR de Pago Interoperable"
+                                      className="w-44 h-44 select-none"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+
+                                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-left space-y-1 w-full">
+                                    <h6 className="text-emerald-800 text-xs font-black flex items-center gap-1.5 uppercase tracking-wider">
+                                      ✨ ESCANEO FÁCIL Y SEGURO
+                                    </h6>
+                                    <p className="text-emerald-700 text-[11px] leading-normal">
+                                      El paciente puede escanear este código directamente usando el <b>lector de QR de la app de Mercado Pago</b> o con la cámara de fotos de su celular.
+                                    </p>
+                                    <p className="text-emerald-600 text-[10px] leading-normal">
+                                      Al hacerlo, se abrirá la pasarela de pago oficial de Mercado Pago para abonar de forma segura y directa.
+                                    </p>
+                                  </div>
+
+                                  <div className="w-full text-center py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600 font-mono select-all">
+                                    ID: QR_{order.id}
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                                    <Button 
+                                      className="bg-indigo-600 hover:bg-indigo-500 border-none font-bold text-[10px] uppercase tracking-wider py-3 shadow-md text-white flex items-center justify-center gap-1.5"
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'qr_url')}
+                                    >
+                                      {copiedField === 'qr_url' ? <Check size={14} /> : <Copy size={14} />} {copiedField === 'qr_url' ? '¡Copiado!' : 'Copiar URL del QR'}
+                                    </Button>
+                                    <Button 
+                                      variant="secondary"
+                                      className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3 flex items-center justify-center gap-1.5"
+                                      onClick={() => setIsPaymentModalOpen(false)}
+                                    >
+                                      <CheckCircle size={14} /> Listo, Finalizar
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SUB VIEW: TRANSFERENCIA BANCARIA */}
+                  {selectedPaymentMethod === 'transfer' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <CreditCard size={15} className="text-emerald-600" /> Cuentas de Transferencia Bancaria
+                          </span>
+                        </div>
+
+                        {!bankAlias && !bankCbu ? (
+                          <div className="p-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-semibold text-center leading-relaxed">
+                            ⚠️ No se han configurado los datos bancarios globales todavía. Ve a la pestaña de "Márgenes y Costos" para definirlos o usa los de prueba abajo.
+                          </div>
+                        ) : null}
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase">Banco</span>
+                            <span className="font-extrabold text-slate-800">{bankName || 'Galicia'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase">Titular</span>
+                            <span className="font-extrabold text-slate-800">{bankTitular || 'DALEDMED S.A.S.'}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex justify-between items-center bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                              <div>
+                                <span className="block text-[8px] text-slate-400 font-bold uppercase leading-none mb-0.5">CBU / CVU</span>
+                                <span className="font-mono text-slate-700 font-bold">{bankCbu || '0070142320000005432109'}</span>
+                              </div>
+                              <button 
+                                onClick={() => handleCopyToClipboard(bankCbu || '0070142320000005432109', 'cbu')}
+                                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md transition-colors"
+                              >
+                                {copiedField === 'cbu' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="col-span-2">
+                            <div className="flex justify-between items-center bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg">
+                              <div>
+                                <span className="block text-[8px] text-slate-400 font-bold uppercase leading-none mb-0.5">Alias</span>
+                                <span className="font-semibold text-slate-700">{bankAlias || 'daledmed.salud'}</span>
+                              </div>
+                              <button 
+                                onClick={() => handleCopyToClipboard(bankAlias || 'daledmed.salud', 'alias')}
+                                className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-md transition-colors"
+                              >
+                                {copiedField === 'alias' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500">Copia un texto pre-formateado con los datos de CBU y Alias para enviar rápidamente por WhatsApp:</p>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button 
+                            className="bg-emerald-600 hover:bg-emerald-500 border-none font-bold text-[10px] uppercase tracking-wider py-3 shadow-md text-white flex items-center justify-center gap-1.5"
+                            onClick={() => handleCopyToClipboard(getTransferWhatsAppText(totals), 'whatsapp')}
+                          >
+                            {copiedField === 'whatsapp' ? <Check size={14} /> : <Share2 size={14} />} {copiedField === 'whatsapp' ? '¡Copiado!' : 'Copiar para WhatsApp'}
+                          </Button>
+                          <Button 
+                            variant="secondary"
+                            className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3 flex items-center justify-center gap-1.5"
+                            onClick={() => setIsPaymentModalOpen(false)}
+                          >
+                            <CheckCircle size={14} /> Listo, Cerrar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB VIEW: CASH */}
+                  {selectedPaymentMethod === 'cash' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-center">
+                        <DollarSign size={40} className="text-amber-500 mx-auto" />
+                        <h5 className="font-extrabold text-sm text-slate-950">Confirmación de Cobro en Efectivo</h5>
+                        <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                          El efectivo <b>debe ser cobrado antes de realizar el despacho del pedido</b>. Al confirmar, el pedido pasará directamente a <b>"En preparación"</b> y se registrará como <b>"Pagado"</b>.
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="secondary"
+                          className="flex-1 border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3"
+                          onClick={() => setSelectedPaymentMethod(null)}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button 
+                          className="flex-1 bg-amber-600 hover:bg-amber-500 border-none text-white font-bold text-[10px] uppercase tracking-wider py-3 shadow-md"
+                          onClick={handleSelectCash}
+                        >
+                          Confirmar Cobro Efectivo
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-6 py-4 flex justify-end border-t border-slate-100 gap-2">
+              <Button 
+                variant="secondary"
+                size="sm"
+                className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-2"
+                onClick={() => setIsPaymentModalOpen(false)}
+              >
+                Cerrar Ventana
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
         </div>

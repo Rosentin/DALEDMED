@@ -11,6 +11,7 @@ import CreateOrderView from './views/admin/CreateOrderView';
 import PharmaQueueView from './views/pharma/PharmaQueueView';
 import OrderDetailView from './views/shared/OrderDetailView';
 import MonitoringView from './views/shared/MonitoringView';
+import ComprobantesView from './views/shared/ComprobantesView';
 
 function ProtectedRoute({ children, allowedRoles, allowedPermission }: { children: React.ReactNode, allowedRoles?: string[], allowedPermission?: string }) {
   const currentUser = useAppStore(state => state.currentUser);
@@ -69,6 +70,9 @@ export default function App() {
           {/* Shared Routes */}
           <Route path="orders" element={
             <ProtectedRoute allowedPermission="orders"><OrdersListView /></ProtectedRoute>
+          } />
+          <Route path="comprobantes" element={
+            <ProtectedRoute allowedPermission="orders"><ComprobantesView /></ProtectedRoute>
           } />
           <Route path="orders/:id" element={
             <ProtectedRoute allowedPermission="orders"><OrderDetailView /></ProtectedRoute>

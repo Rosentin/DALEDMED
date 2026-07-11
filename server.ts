@@ -5,6 +5,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { setGlobalDispatcher, Agent } from 'undici';
+import PDFDocument from 'pdfkit';
+import nodemailer from 'nodemailer';
 
 // Set global dispatcher to prevent fetch / undici Headers Timeout (30s) during heavy/slow AI requests
 setGlobalDispatcher(new Agent({
@@ -355,6 +357,452 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error extracting prescription:', error);
       res.status(500).json({ error: error.message || 'Error processing prescription' });
+    }
+  });
+
+
+  app.post('/api/mercadopago/preference', async (req, res) => {
+    try {
+      const { orderId, totalAmount, returnUrl } = req.body;
+      if (!orderId || !totalAmount) {
+        return res.status(400).json({ error: 'Faltan datos requeridos (orderId o totalAmount).' });
+      }
+
+      // Fetch Mercado Pago Access Token from Firestore config/main
+      let mpAccessToken = '';
+      try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        let projectId = 'remixed-project-id';
+        let databaseId = '(default)';
+        if (fs.existsSync(configPath)) {
+          const configJson = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          projectId = configJson.projectId || projectId;
+          databaseId = configJson.firestoreDatabaseId || databaseId;
+        }
+
+        const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/config/main`;
+        const configResponse = await fetch(firestoreUrl);
+        if (configResponse.ok) {
+          const doc = await configResponse.json();
+          if (doc.fields && doc.fields.mercadoPagoAccessToken && doc.fields.mercadoPagoAccessToken.stringValue) {
+            mpAccessToken = doc.fields.mercadoPagoAccessToken.stringValue;
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching MP config from Firestore:', err);
+      }
+
+      if (mpAccessToken) {
+        console.log(`Creating real Mercado Pago preference for Order #${orderId}, Amount: $${totalAmount}`);
+        const mpResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${mpAccessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            items: [
+              {
+                id: orderId,
+                title: `Pedido #${orderId} - DALEDMED`,
+                quantity: 1,
+                currency_id: 'ARS',
+                unit_price: Number(totalAmount)
+              }
+            ],
+            back_urls: {
+              success: returnUrl,
+              pending: returnUrl,
+              failure: returnUrl
+            },
+            auto_return: 'approved',
+            external_reference: orderId,
+            statement_descriptor: 'DALEDMED'
+          })
+        });
+
+        if (mpResponse.ok) {
+          const preference = await mpResponse.json();
+          console.log('Real Mercado Pago preference created successfully:', preference.id);
+          return res.json({
+            isReal: true,
+            initPoint: preference.init_point,
+            sandboxInitPoint: preference.sandbox_init_point,
+            preferenceId: preference.id
+          });
+        } else {
+          const errorData = await mpResponse.json();
+          console.error('Error calling Mercado Pago API:', errorData);
+          return res.json({
+            isReal: false,
+            initPoint: `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=mock_${orderId}_${Math.floor(Math.random()*1000000)}`,
+            message: 'Error de API Mercado Pago, fallback a enlace simulado de alta fidelidad.',
+            errorDetails: errorData
+          });
+        }
+      } else {
+        console.log(`No Mercado Pago Access Token configured. Simulating preference for Order #${orderId}`);
+        const simulatedUrl = `https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=sim_${orderId}_${Math.floor(Math.random()*1000000)}`;
+        return res.json({
+          isReal: false,
+          initPoint: simulatedUrl,
+          message: 'Modo simulación (Sin Access Token)'
+        });
+      }
+    } catch (err: any) {
+      console.error('Error in /api/mercadopago/preference:', err);
+      res.status(500).json({ error: err?.message || 'Error del servidor al crear preferencia.' });
+    }
+  });
+
+
+  // --- PDF RECEIPT AND SMTP EMAIL INTEGRATION ---
+
+  function parseFirestoreFields(fields: any): any {
+    if (!fields) return {};
+    const obj: any = {};
+    for (const key of Object.keys(fields)) {
+      const val = fields[key];
+      if (!val) continue;
+      if ('stringValue' in val) {
+        obj[key] = val.stringValue;
+      } else if ('integerValue' in val) {
+        obj[key] = parseInt(val.integerValue, 10);
+      } else if ('doubleValue' in val) {
+        obj[key] = parseFloat(val.doubleValue);
+      } else if ('booleanValue' in val) {
+        obj[key] = val.booleanValue;
+      } else if ('arrayValue' in val) {
+        const arr = val.arrayValue.values || [];
+        obj[key] = arr.map((item: any) => {
+          if (item && 'mapValue' in item && item.mapValue) {
+            return parseFirestoreFields(item.mapValue.fields);
+          } else if (item && 'stringValue' in item) {
+            return item.stringValue;
+          } else if (item && 'integerValue' in item) {
+            return parseInt(item.integerValue, 10);
+          } else if (item && 'doubleValue' in item) {
+            return parseFloat(item.doubleValue);
+          } else if (item && 'booleanValue' in item) {
+            return item.booleanValue;
+          }
+          return item;
+        });
+      } else if ('mapValue' in val && val.mapValue) {
+        obj[key] = parseFirestoreFields(val.mapValue.fields);
+      } else if ('nullValue' in val) {
+        obj[key] = null;
+      }
+    }
+    return obj;
+  }
+
+  async function getFirestoreDocument(collectionName: string, docId: string): Promise<any> {
+    try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      let projectId = 'remixed-project-id';
+      let databaseId = '(default)';
+      if (fs.existsSync(configPath)) {
+        const configJson = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        projectId = configJson.projectId || projectId;
+        databaseId = configJson.firestoreDatabaseId || databaseId;
+      }
+
+      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/${collectionName}/${docId}`;
+      const response = await fetch(firestoreUrl);
+      if (response.ok) {
+        const doc = await response.json();
+        return doc;
+      }
+    } catch (err) {
+      console.error(`Error fetching doc ${collectionName}/${docId} from Firestore:`, err);
+    }
+    return null;
+  }
+
+  async function fetchAndParseFirestoreDoc(collectionName: string, docId: string): Promise<any> {
+    const rawDoc = await getFirestoreDocument(collectionName, docId);
+    if (!rawDoc || !rawDoc.fields) return null;
+    return {
+      id: docId,
+      ...parseFirestoreFields(rawDoc.fields)
+    };
+  }
+
+  function generateReceiptPdf(order: any, patient: any): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        const buffers: Buffer[] = [];
+        doc.on('data', (chunk) => buffers.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
+        doc.on('error', (err) => reject(err));
+
+        const primaryColor = '#0f172a'; // slate-900
+        const secondaryColor = '#475569'; // slate-600
+        const lightBg = '#f8fafc'; // slate-50
+        const borderColor = '#e2e8f0'; // slate-200
+
+        // Title Header
+        doc.fillColor(primaryColor).fontSize(20).font('Helvetica-Bold').text('DALEDMED', 40, 40);
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(secondaryColor).text('COMPROBANTE DE PAGO Y RESUMEN', 40, 62);
+
+        // Top line
+        doc.moveTo(40, 75).lineTo(555, 75).strokeColor(borderColor).lineWidth(1).stroke();
+
+        // Order and TX Details
+        const txId = order.idTransaccion || order.preferenceId || `TX-${order.id}-${Math.floor(Date.now() / 1000)}`;
+        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text(`ID Pedido: ${order.id}`, 40, 90);
+        doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text(`ID Transacción: ${txId}`, 280, 90);
+
+        const dateStr = order.fecha ? new Date(order.fecha).toLocaleString('es-AR') : new Date().toLocaleString('es-AR');
+        doc.fillColor(secondaryColor).fontSize(8.5).font('Helvetica').text(`Fecha de Pago: ${dateStr}`, 40, 105);
+
+        // Separator
+        doc.moveTo(40, 120).lineTo(555, 120).strokeColor(borderColor).stroke();
+
+        // Patient block
+        doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('Detalles del Paciente', 40, 135);
+        
+        const patName = patient ? patient.name : (order.pacienteNombre || 'No especificado');
+        const patDni = patient ? patient.dni : 'No especificado';
+        const patPhone = patient ? patient.phone : 'No especificado';
+        const patAddress = order.direccionEntrega || (patient ? patient.address : 'No especificado');
+        const patObraSocial = order.obraSocial || (patient ? patient.obraSocial : 'No especificado');
+
+        doc.rect(40, 150, 515, 60).fill(lightBg);
+        doc.fillColor(primaryColor).fontSize(8.5).font('Helvetica-Bold');
+        doc.text('Paciente:', 50, 160).font('Helvetica').text(patName, 110, 160);
+        doc.font('Helvetica-Bold').text('DNI:', 50, 175).font('Helvetica').text(patDni, 110, 175);
+        doc.font('Helvetica-Bold').text('Celular:', 50, 190).font('Helvetica').text(patPhone, 110, 190);
+
+        doc.font('Helvetica-Bold').text('Obra Social:', 280, 160).font('Helvetica').text(patObraSocial, 350, 160);
+        doc.font('Helvetica-Bold').text('Dirección:', 280, 175).font('Helvetica').text(patAddress, 350, 175);
+
+        // Table
+        doc.fillColor(primaryColor).fontSize(11).font('Helvetica-Bold').text('Medicamentos y Productos Adquiridos', 40, 230);
+
+        let currentY = 248;
+        doc.rect(40, currentY, 515, 18).fill(primaryColor);
+        doc.fillColor('#ffffff').fontSize(8.5).font('Helvetica-Bold');
+        doc.text('Producto / Presentación', 50, currentY + 5);
+        doc.text('Cant.', 370, currentY + 5);
+        doc.text('Precio Unit.', 420, currentY + 5);
+        doc.text('Subtotal', 490, currentY + 5);
+
+        currentY += 18;
+
+        const meds = order.medicamentos || [];
+        const addProducts = order.productosAdicionales || [];
+        const allItems = [...meds, ...addProducts];
+
+        doc.fillColor(primaryColor).font('Helvetica');
+        let itemIndex = 0;
+        
+        for (const item of allItems) {
+          if (itemIndex % 2 === 0) {
+            doc.rect(40, currentY, 515, 20).fill('#fafafa');
+            doc.fillColor(primaryColor);
+          }
+          
+          const nameText = item.nombre || item.nombreMedicamento || 'Medicamento';
+          const presentation = item.presentacion ? ` (${item.presentacion})` : '';
+          const desc = `${nameText}${presentation}`;
+          const qty = item.cantidad || 1;
+          const price = item.precioFinal || item.precioParticular || 0;
+          const subtotal = qty * price;
+
+          doc.text(desc, 50, currentY + 5, { width: 310, height: 11, ellipsis: true });
+          doc.text(qty.toString(), 370, currentY + 5);
+          doc.text(`$${price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`, 420, currentY + 5);
+          doc.text(`$${subtotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`, 490, currentY + 5);
+
+          currentY += 20;
+          itemIndex++;
+        }
+
+        doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(borderColor).stroke();
+        currentY += 10;
+
+        const logisticsCost = order.costoLogistico || 0;
+        const subtotalOrder = allItems.reduce((acc: number, item: any) => {
+          const qty = item.cantidad || 1;
+          const price = item.precioFinal || item.precioParticular || 0;
+          return acc + (qty * price);
+        }, 0);
+        const grandTotal = subtotalOrder + logisticsCost;
+
+        doc.fillColor(secondaryColor).fontSize(9).font('Helvetica');
+        doc.text('Subtotal Productos:', 340, currentY);
+        doc.fillColor(primaryColor).font('Helvetica-Bold').text(`$${subtotalOrder.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`, 460, currentY, { align: 'right', width: 90 });
+        currentY += 14;
+
+        doc.fillColor(secondaryColor).font('Helvetica').text('Costo de Envío:', 340, currentY);
+        doc.fillColor(primaryColor).font('Helvetica-Bold').text(`$${logisticsCost.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`, 460, currentY, { align: 'right', width: 90 });
+        currentY += 14;
+
+        doc.moveTo(340, currentY).lineTo(555, currentY).strokeColor(primaryColor).lineWidth(1).stroke();
+        currentY += 6;
+
+        doc.fillColor(primaryColor).fontSize(10.5).font('Helvetica-Bold').text('TOTAL ABONADO:', 340, currentY);
+        doc.fontSize(11).text(`$${grandTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`, 460, currentY, { align: 'right', width: 90 });
+        currentY += 35;
+
+        doc.moveTo(40, currentY).lineTo(555, currentY).strokeColor(borderColor).lineWidth(1).stroke();
+        currentY += 12;
+
+        doc.fillColor(secondaryColor).fontSize(10).font('Helvetica-Bold').text(
+          'Este documento es un comprobante y resumen de lo pagado',
+          40,
+          currentY,
+          { align: 'center', width: 515 }
+        );
+
+        doc.end();
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function sendReceiptEmail(order: any, patient: any, pdfBuffer: Buffer, config: any): Promise<boolean> {
+    if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
+      console.warn('SMTP parameters are missing from configuration. Cannot send receipt email.');
+      return false;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.smtpHost,
+      port: parseInt(config.smtpPort, 10) || 465,
+      secure: config.smtpSecure ?? true,
+      auth: {
+        user: config.smtpUser,
+        pass: config.smtpPass
+      }
+    });
+
+    const patName = patient ? patient.name : (order.pacienteNombre || 'Paciente');
+    const patEmail = patient?.email || order.pacienteEmail || '';
+    
+    const recipients = [];
+    if (patEmail) recipients.push(patEmail);
+    if (config.smtpSendTo) recipients.push(config.smtpSendTo);
+
+    if (recipients.length === 0) {
+      console.warn('No email recipient specified for receipt email. SMTP Config has no admin copy and patient has no email.');
+      return false;
+    }
+
+    const subtotalOrder = (order.medicamentos || []).reduce((acc: number, item: any) => acc + ((item.cantidad || 1) * (item.precioFinal || item.precioParticular || 0)), 0) + (order.productosAdicionales || []).reduce((acc: number, item: any) => acc + ((item.cantidad || 1) * (item.precioFinal || item.precioParticular || 0)), 0);
+    const grandTotal = subtotalOrder + (order.costoLogistico || 0);
+
+    const mailOptions = {
+      from: `"DALEDMED" <${config.smtpUser}>`,
+      to: recipients.join(', '),
+      subject: `Comprobante de Pago y Resumen - Pedido #${order.id}`,
+      text: `Hola ${patName},\n\nAdjuntamos el comprobante de pago y resumen de tu pedido #${order.id}.\n\nEste documento es un comprobante y resumen de lo pagado.\n\nAtentamente,\nEl equipo de DALEDMED`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+          <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Comprobante de Pago y Resumen</h2>
+          <p style="font-size: 14px; line-height: 1.5; color: #334155;">Hola <strong>${patName}</strong>,</p>
+          <p style="font-size: 14px; line-height: 1.5; color: #334155;">Adjuntamos a este correo el comprobante oficial de pago y el resumen correspondiente a tu pedido <strong>#${order.id}</strong>.</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0 0 8px 0; font-size: 13.5px; color: #334155;"><strong>ID de Pedido:</strong> ${order.id}</p>
+            <p style="margin: 0 0 8px 0; font-size: 13.5px; color: #334155;"><strong>Total Abonado:</strong> $${grandTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
+            <p style="margin: 0; font-size: 13.5px; color: #334155;"><strong>Método de pago:</strong> ${order.metodoPago || 'Mercado Pago'}</p>
+          </div>
+          <p style="font-size: 11.5px; color: #64748b; font-style: italic; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center;">
+            Este documento es un comprobante y resumen de lo pagado.
+          </p>
+          <p style="font-size: 12.5px; color: #64748b; margin-top: 15px;">
+            Atentamente,<br><strong>El equipo de DALEDMED</strong>
+          </p>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `comprobante_pedido_${order.id}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    };
+
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log('Receipt email sent successfully:', info.messageId);
+      return true;
+    } catch (err) {
+      console.error('Error sending SMTP receipt email:', err);
+      return false;
+    }
+  }
+
+  // API to Download Receipt PDF
+  app.get('/api/receipt/pdf/:orderId', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const order = await fetchAndParseFirestoreDoc('orders', orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido no encontrado' });
+      }
+
+      const patientId = order.pacienteId;
+      let patient = null;
+      if (patientId) {
+        patient = await fetchAndParseFirestoreDoc('patients', patientId);
+      }
+
+      const pdfBuffer = await generateReceiptPdf(order, patient);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=comprobante_pedido_${orderId}.pdf`);
+      res.send(pdfBuffer);
+    } catch (err: any) {
+      console.error('Error serving receipt PDF:', err);
+      res.status(500).json({ error: err?.message || 'Error al generar el comprobante PDF' });
+    }
+  });
+
+  // API to Email Receipt PDF
+  app.post('/api/receipt/send-email/:orderId', async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { recipientEmail } = req.body; // optional override
+
+      const order = await fetchAndParseFirestoreDoc('orders', orderId);
+      if (!order) {
+        return res.status(404).json({ error: 'Pedido no encontrado' });
+      }
+
+      const patientId = order.pacienteId;
+      let patient = null;
+      if (patientId) {
+        patient = await fetchAndParseFirestoreDoc('patients', patientId);
+      }
+
+      // If user passed a specific recipientEmail, override patient's email
+      if (recipientEmail && patient) {
+        patient.email = recipientEmail;
+      } else if (recipientEmail) {
+        patient = { name: order.pacienteNombre || 'Paciente', email: recipientEmail };
+      }
+
+      const config = await fetchAndParseFirestoreDoc('config', 'main');
+      if (!config || !config.smtpHost || !config.smtpUser) {
+        return res.status(400).json({ error: 'El servidor de correo SMTP no está configurado en el sistema.' });
+      }
+
+      const pdfBuffer = await generateReceiptPdf(order, patient);
+      const success = await sendReceiptEmail(order, patient, pdfBuffer, config);
+
+      if (success) {
+        res.json({ success: true, message: 'Comprobante enviado exitosamente por correo.' });
+      } else {
+        res.status(500).json({ error: 'No se pudo enviar el correo. Verifique la configuración SMTP.' });
+      }
+    } catch (err: any) {
+      console.error('Error sending receipt email:', err);
+      res.status(500).json({ error: err?.message || 'Error al enviar el comprobante por correo.' });
     }
   });
 

@@ -17,17 +17,28 @@ function loadGoogleMapsScript(apiKey: string, callback: () => void) {
     callback();
     return;
   }
-  const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID);
+  const existingScript = document.getElementById(GOOGLE_MAPS_SCRIPT_ID) as HTMLScriptElement;
   if (existingScript) {
-    existingScript.addEventListener('load', callback);
-    return;
+    const srcUrl = existingScript.src || '';
+    if (srcUrl.includes(`key=${apiKey}`)) {
+      existingScript.addEventListener('load', callback);
+      if (existingScript.dataset.loaded === 'true' || (window as any).google?.maps) {
+        callback();
+      }
+      return;
+    } else {
+      existingScript.remove();
+    }
   }
   const script = document.createElement('script');
   script.id = GOOGLE_MAPS_SCRIPT_ID;
   script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=es`;
   script.async = true;
   script.defer = true;
-  script.addEventListener('load', callback);
+  script.addEventListener('load', () => {
+    script.dataset.loaded = 'true';
+    callback();
+  });
   document.head.appendChild(script);
 }
 

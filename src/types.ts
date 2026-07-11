@@ -14,6 +14,7 @@ export interface Patient {
   name: string;
   dni: string;
   phone: string;
+  email?: string;
   obraSocial: string;
   numeroAfiliado: string;
   address: string;
@@ -53,6 +54,7 @@ export interface Order {
   fecha: string;
   pacienteId: string;
   pacienteNombre?: string;
+  pacienteEmail?: string;
   dni?: string;
   numeroAfiliado?: string;
   medico: string | null;
@@ -78,6 +80,10 @@ export interface Order {
   driverLat?: number | null;
   driverLng?: number | null;
   driverLastUpdated?: string | null;
+  linkPagoUrl?: string;
+  qrString?: string;
+  detallesPago?: string;
+  bankInfoUsada?: string;
   
   metodoPago?: 'QR' | 'Transferencia' | 'Efectivo' | 'Credito' | 'Debito' | 'Link';
   estadoPago: 'Pendiente' | 'Pagado' | 'Rechazado' | 'Anulado' | 'Reintegrado';

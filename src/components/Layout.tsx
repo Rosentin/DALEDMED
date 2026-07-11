@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import { cn } from '../utils';
-import { LayoutDashboard, ShoppingBag, PlusCircle, Inbox, LogOut, Menu, X, Map } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, PlusCircle, Inbox, LogOut, Menu, X, Map, FileText } from 'lucide-react';
 import AssistantWidget from './AssistantWidget';
 import { useState } from 'react';
 
@@ -89,10 +89,16 @@ export default function Layout() {
           )}
 
           {currentUser.permissions?.includes('orders') && (
-            <NavLink to="/orders" onClick={closeMobileMenu} className={({isActive}) => cn("flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors", isActive ? "bg-blue-600/10 text-blue-400 border-r-4 border-blue-600" : "hover:bg-slate-800")}>
-              <ShoppingBag size={20} />
-              Gestión de Pedidos
-            </NavLink>
+            <>
+              <NavLink to="/orders" onClick={closeMobileMenu} className={({isActive}) => cn("flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors", isActive ? "bg-blue-600/10 text-blue-400 border-r-4 border-blue-600" : "hover:bg-slate-800")}>
+                <ShoppingBag size={20} />
+                Gestión de Pedidos
+              </NavLink>
+              <NavLink to="/comprobantes" onClick={closeMobileMenu} className={({isActive}) => cn("flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors", isActive ? "bg-blue-600/10 text-blue-400 border-r-4 border-blue-600" : "hover:bg-slate-800")}>
+                <FileText size={20} />
+                Comprobantes
+              </NavLink>
+            </>
           )}
 
           {(currentUser.permissions?.includes('config') || currentUser.permissions?.includes('users')) && (
