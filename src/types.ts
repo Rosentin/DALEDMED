@@ -84,6 +84,7 @@ export interface Order {
   qrString?: string;
   detallesPago?: string;
   bankInfoUsada?: string;
+  localidad?: string;
   
   metodoPago?: 'QR' | 'Transferencia' | 'Efectivo' | 'Credito' | 'Debito' | 'Link';
   estadoPago: 'Pendiente' | 'Pagado' | 'Rechazado' | 'Anulado' | 'Reintegrado';

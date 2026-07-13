@@ -35,6 +35,51 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.warn(`Firestore Error [${operationType}] at ${path}: ${errMsg}`);
 }
 
+const generateOrderId = (fullName: string, dni: string, locality: string): string => {
+  const cleanName = (fullName || '').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let firstLetterName = 'X';
+  let firstLetterSurname = 'X';
+
+  if (cleanName) {
+    if (cleanName.includes(',')) {
+      const parts = cleanName.split(',');
+      const surnamePart = parts[0].trim();
+      const namePart = parts[1].trim();
+      if (namePart) firstLetterName = namePart.charAt(0);
+      if (surnamePart) firstLetterSurname = surnamePart.charAt(0);
+    } else {
+      const parts = cleanName.split(/\s+/);
+      if (parts.length >= 2) {
+        firstLetterName = parts[0].charAt(0);
+        firstLetterSurname = parts[parts.length - 1].charAt(0);
+      } else if (parts.length === 1 && parts[0]) {
+        firstLetterName = parts[0].charAt(0);
+        firstLetterSurname = parts[0].length > 1 ? parts[0].charAt(1) : 'X';
+      }
+    }
+  }
+
+  // Last 3 digits of DNI
+  const cleanDni = (dni || '').trim().replace(/\D/g, '');
+  let last3Dni = '000';
+  if (cleanDni.length >= 3) {
+    last3Dni = cleanDni.slice(-3);
+  } else if (cleanDni.length > 0) {
+    last3Dni = cleanDni.padStart(3, '0');
+  }
+
+  // 2 letters of locality
+  const cleanLocality = (locality || 'Mendoza').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let locality2 = 'ME'; // default Mendoza
+  if (cleanLocality.length >= 2) {
+    locality2 = cleanLocality.substring(0, 2);
+  } else if (cleanLocality.length === 1) {
+    locality2 = cleanLocality + 'X';
+  }
+
+  return `${firstLetterName}${firstLetterSurname}${last3Dni}${locality2}`;
+};
+
 interface AppState {
   currentUser: User | null;
   users: User[];
@@ -154,7 +199,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createOrder: (orderData) => {
-    const id = Math.random().toString(36).substring(2, 9).toUpperCase();
+    const id = generateOrderId(
+      orderData.pacienteNombre || orderData.pacienteId || '',
+      orderData.dni || '',
+      orderData.localidad || 'Mendoza'
+    );
     const newOrder: Order = {
       id,
       fecha: new Date().toISOString(),

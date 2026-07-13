@@ -18,6 +18,7 @@ export default function CreateOrderView() {
   // Form State
   const [pacienteId, setPacienteId] = useState('');
   const [dni, setDni] = useState('');
+  const [localidad, setLocalidad] = useState('Mendoza');
   const [obraSocial, setObraSocial] = useState('');
   const [numeroAfiliado, setNumeroAfiliado] = useState('');
   const [medico, setMedico] = useState('');
@@ -139,6 +140,7 @@ export default function CreateOrderView() {
       pacienteId: pacienteId.trim().toUpperCase(),
       pacienteNombre: pacienteId.trim().toUpperCase(),
       dni: dni.trim().toUpperCase(),
+      localidad: localidad.trim().toUpperCase(),
       numeroAfiliado: numeroAfiliado.trim().toUpperCase(),
       obraSocial: obraSocial.trim().toUpperCase(),
       medico: medico ? medico.trim().toUpperCase() : null,
@@ -229,6 +231,7 @@ export default function CreateOrderView() {
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Paciente (Nombre)" value={pacienteId} onChange={e => setPacienteId(e.target.value)} required />
                   <Input label="DNI" value={dni} onChange={e => setDni(e.target.value)} />
+                  <Input label="Localidad" value={localidad} onChange={e => setLocalidad(e.target.value)} required />
                   <Input label="Obra Social" value={obraSocial} onChange={e => setObraSocial(e.target.value)} required />
                   <Input label="N° Afiliado" value={numeroAfiliado} onChange={e => setNumeroAfiliado(e.target.value)} />
                   <Input label="Médico" value={medico} onChange={e => setMedico(e.target.value)} />

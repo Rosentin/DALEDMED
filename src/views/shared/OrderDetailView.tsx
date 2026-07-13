@@ -5,8 +5,10 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck, Copy, ExternalLink, QrCode, Check, Share2, Wallet, Download, Mail, Edit3, Trash2 } from 'lucide-react';
+import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck, Copy, ExternalLink, QrCode, Check, Share2, Wallet, Download, Mail, Edit3, Trash2, X } from 'lucide-react';
 import { OrderState } from '../../types';
+import { EditOrderModal } from './OrdersListView';
+import { SecurityCodeModal } from '../../components/SecurityCodeModal';
 
 const GOOGLE_MAPS_SCRIPT_ID = 'google-maps-api-script';
 
@@ -178,6 +180,11 @@ export default function OrderDetailView() {
   const [isRealPayment, setIsRealPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Confirm Payment Modal States
+  const [isConfirmPaymentModalOpen, setIsConfirmPaymentModalOpen] = useState(false);
+  const [selectedMedio, setSelectedMedio] = useState<'Credito' | 'Debito' | 'Transferencia' | 'Efectivo' | 'QR' | 'Link'>('Credito');
+  const [selectedBilletera, setSelectedBilletera] = useState<'Mercado Pago' | 'MODO' | 'Cuenta DNI' | 'Ualá' | 'BNA+' | 'Galicia' | 'Ninguno'>('Mercado Pago');
   
   // Receipt Email States
   const [sendingReceiptEmail, setSendingReceiptEmail] = useState(false);
@@ -185,6 +192,9 @@ export default function OrderDetailView() {
   const [emailInput, setEmailInput] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [selectedOrderToEdit, setSelectedOrderToEdit] = useState<any>(null);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [securityAction, setSecurityAction] = useState<'edit' | 'delete' | null>(null);
 
   const handleCopyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -1107,11 +1117,12 @@ export default function OrderDetailView() {
     }
   };
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = (metodo: any, detalles: string) => {
     updateOrder(order.id, {
       estadoPago: 'Pagado',
       estado: 'En preparación',
-      metodoPago: 'Link'
+      metodoPago: metodo,
+      detallesPago: detalles
     });
     triggerReceiptEmail(order.id);
   };
@@ -1142,20 +1153,26 @@ export default function OrderDetailView() {
           </div>
           <p className="text-gray-500 text-sm">Creado por {order.creadoPor} en {new Date(order.fecha).toLocaleString()}</p>
         </div>
-        {/* Delete button with secure password */}
-        <div>
+        {/* Actions with secure password */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="text-xs font-bold uppercase tracking-wider text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 flex items-center gap-1.5"
+            onClick={() => {
+              setSecurityAction('edit');
+              setIsSecurityModalOpen(true);
+            }}
+          >
+            <Edit3 size={14} />
+            Modificar Pedido
+          </Button>
+ 
           <Button
             variant="outline"
             className="text-xs font-bold uppercase tracking-wider text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 flex items-center gap-1.5"
             onClick={() => {
-              const code = prompt("Ingrese código de seguridad para proceder:");
-              if (code === "0000") {
-                deleteOrder(order.id);
-                alert("Pedido eliminado correctamente.");
-                navigate('/dashboard');
-              } else if (code !== null) {
-                alert("Código incorrecto.");
-              }
+              setSecurityAction('delete');
+              setIsSecurityModalOpen(true);
             }}
           >
             <Trash2 size={14} />
@@ -1550,7 +1567,29 @@ export default function OrderDetailView() {
                     >
                       <Info size={14} /> Ver / Copiar Datos de Pago
                     </Button>
-                    <Button variant="primary" className="w-full bg-emerald-600 hover:bg-emerald-500 border-none font-bold text-[10px] uppercase tracking-wider py-3.5 shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2" onClick={handleConfirmPayment}>
+                    <Button 
+                      variant="primary" 
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 border-none font-bold text-[10px] uppercase tracking-wider py-3.5 shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2" 
+                      onClick={() => {
+                        if (order.metodoPago === 'Link') {
+                          setSelectedMedio('Link');
+                          setSelectedBilletera('Mercado Pago');
+                        } else if (order.metodoPago === 'QR') {
+                          setSelectedMedio('QR');
+                          setSelectedBilletera('Mercado Pago');
+                        } else if (order.metodoPago === 'Transferencia') {
+                          setSelectedMedio('Transferencia');
+                          setSelectedBilletera('Ninguno');
+                        } else if (order.metodoPago === 'Efectivo') {
+                          setSelectedMedio('Efectivo');
+                          setSelectedBilletera('Ninguno');
+                        } else {
+                          setSelectedMedio('Credito');
+                          setSelectedBilletera('Mercado Pago');
+                        }
+                        setIsConfirmPaymentModalOpen(true);
+                      }}
+                    >
                       <CheckCircle size={14} /> Impactar Pago (Prueba de Sincronización)
                     </Button>
                   </div>
@@ -2094,6 +2133,144 @@ export default function OrderDetailView() {
             </Card>
           )}
 
+
+      {/* Modal para Modificar Pedido */}
+      {/* Security Code Verification Modal */}
+      <SecurityCodeModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => {
+          setIsSecurityModalOpen(false);
+          setSecurityAction(null);
+        }}
+        onConfirm={() => {
+          setIsSecurityModalOpen(false);
+          if (securityAction === 'edit' && order) {
+            setSelectedOrderToEdit(order);
+          } else if (securityAction === 'delete' && order) {
+            deleteOrder(order.id);
+            navigate('/orders');
+          }
+          setSecurityAction(null);
+        }}
+        actionLabel={securityAction === 'delete' ? 'Eliminar' : 'Modificar'}
+      />
+
+      {/* Confirm Payment Modal */}
+      {isConfirmPaymentModalOpen && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-slate-900 px-6 py-5 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg">Acreditar Pago del Pedido</h3>
+                <p className="text-slate-400 text-xs font-mono">ID #{order.id}</p>
+              </div>
+              <button 
+                onClick={() => setIsConfirmPaymentModalOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-5">
+              <div className="space-y-1 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex justify-between text-xs font-semibold text-slate-500">
+                  <span>Paciente</span>
+                  <span>Total a Pagar</span>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="font-bold text-slate-800 text-sm truncate max-w-[200px]">{order.pacienteNombre}</span>
+                  <span className="font-black text-emerald-600 text-lg">${calculateTotals().total}</span>
+                </div>
+              </div>
+
+              {/* Medio de Pago */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Medio de Pago Utilizado
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'Credito', label: 'Tarj. Crédito' },
+                    { id: 'Debito', label: 'Tarj. Débito' },
+                    { id: 'Transferencia', label: 'Transferencia' },
+                    { id: 'Efectivo', label: 'Efectivo' },
+                    { id: 'Link', label: 'MP Link' },
+                    { id: 'QR', label: 'MP QR' }
+                  ].map(method => (
+                    <button
+                      key={method.id}
+                      type="button"
+                      onClick={() => setSelectedMedio(method.id as any)}
+                      className={`py-2.5 px-3 rounded-lg text-xs font-bold border transition-all text-center ${
+                        selectedMedio === method.id 
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20' 
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {method.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Billetera / Plataforma */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Billetera / Plataforma
+                </label>
+                <select
+                  value={selectedBilletera}
+                  onChange={(e) => setSelectedBilletera(e.target.value as any)}
+                  className="w-full h-11 rounded-lg border border-slate-200 bg-slate-50 px-3.5 text-xs text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Mercado Pago">Mercado Pago</option>
+                  <option value="MODO">MODO</option>
+                  <option value="Cuenta DNI">Cuenta DNI</option>
+                  <option value="Ualá">Ualá</option>
+                  <option value="BNA+">BNA+</option>
+                  <option value="Galicia">Banco Galicia</option>
+                  <option value="Ninguno">Ninguno / Otro / Directo</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="bg-slate-50 px-6 py-4 flex gap-3 border-t border-slate-100">
+              <Button 
+                variant="outline" 
+                className="flex-1 font-bold py-2.5"
+                onClick={() => setIsConfirmPaymentModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                variant="primary" 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 font-bold py-2.5"
+                onClick={() => {
+                  handleConfirmPayment(selectedMedio, selectedBilletera);
+                  setIsConfirmPaymentModalOpen(false);
+                }}
+              >
+                Acreditar Pago
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedOrderToEdit && (
+        <EditOrderModal
+          order={selectedOrderToEdit}
+          onClose={() => setSelectedOrderToEdit(null)}
+          onSave={(updatedOrder) => {
+            updateOrder(selectedOrderToEdit.id, updatedOrder);
+            setSelectedOrderToEdit(null);
+          }}
+        />
+      )}
 
       {/* Dynamic Payment Selection Modal */}
       {isPaymentModalOpen && order && (

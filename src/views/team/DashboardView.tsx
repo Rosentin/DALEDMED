@@ -610,20 +610,74 @@ export default function DashboardView() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Pendientes de Pago</p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Distribución de Métodos de Pago (Unidades)</p>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'QR').length}</p>
-                    <p className="text-[9px] text-slate-400">QR / Transfer</p>
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Distribución por Medio de Pago</p>
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Credito').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Crédito</p>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Link' || !o.metodoPago).length}</p>
-                    <p className="text-[9px] text-slate-400">Pago Link</p>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Debito').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Débito</p>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Efectivo').length}</p>
-                    <p className="text-[9px] text-slate-400">Efectivo</p>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Transferencia').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Transferencia</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Efectivo').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Efectivo</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'QR').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">MP QR</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Link' || !o.metodoPago).length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">MP Link</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Plataforma / Billetera Virtual</p>
+                <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold">
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100 col-span-2">
+                    <p className="text-blue-600">
+                      {paidOrders.filter(o => o.detallesPago === 'Mercado Pago' || o.metodoPago === 'Link' || o.metodoPago === 'QR').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium uppercase tracking-wider">Mercado Pago</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100 col-span-2">
+                    <p className="text-cyan-600">
+                      {paidOrders.filter(o => o.detallesPago === 'MODO').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium uppercase tracking-wider">MODO</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Cuenta DNI').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Cta DNI</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Ualá').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Ualá</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'BNA+').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">BNA+</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Galicia').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Galicia</p>
                   </div>
                 </div>
               </div>
@@ -942,7 +996,7 @@ export default function DashboardView() {
                 <Button 
                   variant="primary" 
                   className="shadow-lg shadow-blue-500/30 px-8 whitespace-nowrap"
-                  onClick={() => navigate('/orders')}
+                  onClick={() => navigate('/orders?status=RepartoYEntregado')}
                 >
                   Ver Entregas
                 </Button>
@@ -1368,20 +1422,75 @@ export default function DashboardView() {
                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Ticket Promedio</p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Distribución de Métodos de Pago</p>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'QR').length}</p>
-                    <p className="text-[9px] text-slate-400">QR / Transfer</p>
+
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Distribución por Medio de Pago</p>
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Credito').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Crédito</p>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Link' || !o.metodoPago).length}</p>
-                    <p className="text-[9px] text-slate-400">Pago Link</p>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Debito').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Débito</p>
                   </div>
-                  <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                    <p className="font-bold text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Efectivo').length}</p>
-                    <p className="text-[9px] text-slate-400">Efectivo</p>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Transferencia').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Transferencia</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Efectivo').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">Efectivo</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'QR').length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">MP QR</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-900">{paidOrders.filter(o => o.metodoPago === 'Link' || !o.metodoPago).length}</p>
+                    <p className="text-[9px] text-slate-400 font-medium">MP Link</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Plataforma / Billetera Virtual</p>
+                <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold">
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100 col-span-2">
+                    <p className="text-blue-600">
+                      {paidOrders.filter(o => o.detallesPago === 'Mercado Pago' || o.metodoPago === 'Link' || o.metodoPago === 'QR').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium uppercase tracking-wider">Mercado Pago</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100 col-span-2">
+                    <p className="text-cyan-600">
+                      {paidOrders.filter(o => o.detallesPago === 'MODO').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium uppercase tracking-wider">MODO</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Cuenta DNI').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Cta DNI</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Ualá').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Ualá</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'BNA+').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">BNA+</p>
+                  </div>
+                  <div className="bg-slate-50 p-1.5 rounded border border-slate-100">
+                    <p className="text-slate-800">
+                      {paidOrders.filter(o => o.detallesPago === 'Galicia').length}
+                    </p>
+                    <p className="text-[8px] text-slate-400 font-medium">Galicia</p>
                   </div>
                 </div>
               </div>
