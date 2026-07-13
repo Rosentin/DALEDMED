@@ -61,8 +61,8 @@ function getDeterministicMendozaCoords(id: string) {
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const baseLat = -32.8895;
-  const baseLng = -68.8458;
+  const baseLat = -32.940464;
+  const baseLng = -68.761822;
   const latOffset = ((Math.abs(hash) % 100) / 4000) - 0.012;
   const lngOffset = (((Math.abs(hash) >> 8) % 100) / 4000) - 0.012;
   return { lat: baseLat + latOffset, lng: baseLng + lngOffset };
@@ -147,7 +147,7 @@ export default function DashboardView() {
     const bounds = new google.maps.LatLngBounds();
     let hasPoints = false;
 
-    const pharmaCenter = { lat: -32.8895, lng: -68.8458 };
+    const pharmaCenter = { lat: -32.940464, lng: -68.761822 };
     const pharmacyMarker = new google.maps.Marker({
       position: pharmaCenter,
       map: map,

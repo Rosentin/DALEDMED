@@ -136,16 +136,21 @@ export default function CreateOrderView() {
     }
     
     const newOrder = createOrder({
-      pacienteId,
-      pacienteNombre: pacienteId,
-      dni,
-      numeroAfiliado,
-      obraSocial,
-      medico,
-      matriculaMedico,
-      token,
-      medicamentos,
-      diagnostico,
+      pacienteId: pacienteId.trim().toUpperCase(),
+      pacienteNombre: pacienteId.trim().toUpperCase(),
+      dni: dni.trim().toUpperCase(),
+      numeroAfiliado: numeroAfiliado.trim().toUpperCase(),
+      obraSocial: obraSocial.trim().toUpperCase(),
+      medico: medico ? medico.trim().toUpperCase() : null,
+      matriculaMedico: matriculaMedico.trim().toUpperCase(),
+      token: token.trim().toUpperCase(),
+      medicamentos: medicamentos.map(m => ({
+        ...m,
+        nombre: m.nombre.trim().toUpperCase(),
+        presentacion: m.presentacion ? m.presentacion.trim().toUpperCase() : '',
+        dosis: m.dosis ? m.dosis.trim().toUpperCase() : ''
+      })),
+      diagnostico: diagnostico.trim().toUpperCase(),
       estado: 'Revisión Farmacéutica'
     });
     

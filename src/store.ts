@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { User, Order, Patient, Role } from './types';
 import { db, auth } from './lib/firebase';
-import { collection, doc, setDoc, updateDoc, onSnapshot, query, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, onSnapshot, query, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 
 enum OperationType {
   CREATE = 'create',
@@ -72,6 +72,7 @@ interface AppState {
   addPatient: (patient: Patient) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   updateConfig: (key: string, value: any) => void;
+  deleteOrder: (id: string) => void;
 }
 
 export const ALL_PERMISSIONS = [
@@ -211,6 +212,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   updateConfig: (key, value) => {
     updateDoc(doc(db, 'config', 'main'), { [key]: value }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'config/main'));
+  },
+  
+  deleteOrder: (id) => {
+    deleteDoc(doc(db, 'orders', id)).catch(e => handleFirestoreError(e, OperationType.DELETE, 'orders/' + id));
   }
 }));
 

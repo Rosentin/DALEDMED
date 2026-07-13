@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Ca
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
-import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck, Copy, ExternalLink, QrCode, Check, Share2, Wallet, Download, Mail } from 'lucide-react';
+import { MapPin, Phone, User, Activity, Loader2, ArrowRight, CheckCircle, Map, Info, AlertTriangle, RefreshCw, CreditCard, DollarSign, FileText, Clock, Truck, Copy, ExternalLink, QrCode, Check, Share2, Wallet, Download, Mail, Edit3, Trash2 } from 'lucide-react';
 import { OrderState } from '../../types';
 
 const GOOGLE_MAPS_SCRIPT_ID = 'google-maps-api-script';
@@ -57,8 +57,8 @@ function getDeterministicMendozaCoords(id: string) {
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const baseLat = -32.8895;
-  const baseLng = -68.8458;
+  const baseLat = -32.940464;
+  const baseLng = -68.761822;
   const latOffset = ((Math.abs(hash) % 100) / 8000) - 0.00625;
   const lngOffset = (((Math.abs(hash) >> 8) % 100) / 8000) - 0.00625;
   return { lat: baseLat + latOffset, lng: baseLng + lngOffset };
@@ -151,6 +151,7 @@ export default function OrderDetailView() {
     orders, 
     currentUser, 
     updateOrder, 
+    deleteOrder,
     margins, 
     baseLogisticsCost, 
     perKmLogisticsCost, 
@@ -183,6 +184,7 @@ export default function OrderDetailView() {
   const [receiptEmailStatus, setReceiptEmailStatus] = useState<{ success: boolean; msg: string } | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
 
   const handleCopyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -319,7 +321,7 @@ export default function OrderDetailView() {
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [mapsError, setMapsError] = useState(false);
   const [directionsError, setDirectionsError] = useState<string | null>(null);
-  const [originAddress, setOriginAddress] = useState('Maipumed');
+  const [originAddress, setOriginAddress] = useState('Ozamis 737, Maipú, Mendoza, Argentina');
   const [calculating, setCalculating] = useState(false);
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
   const autocompleteInstance = useRef<any>(null);
@@ -1140,6 +1142,26 @@ export default function OrderDetailView() {
           </div>
           <p className="text-gray-500 text-sm">Creado por {order.creadoPor} en {new Date(order.fecha).toLocaleString()}</p>
         </div>
+        {/* Delete button with secure password */}
+        <div>
+          <Button
+            variant="outline"
+            className="text-xs font-bold uppercase tracking-wider text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 flex items-center gap-1.5"
+            onClick={() => {
+              const code = prompt("Ingrese código de seguridad para proceder:");
+              if (code === "0000") {
+                deleteOrder(order.id);
+                alert("Pedido eliminado correctamente.");
+                navigate('/dashboard');
+              } else if (code !== null) {
+                alert("Código incorrecto.");
+              }
+            }}
+          >
+            <Trash2 size={14} />
+            Eliminar Pedido
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -1654,7 +1676,7 @@ export default function OrderDetailView() {
                         placeholder="Ej: Av. del Libertador 1500, Buenos Aires"
                         value={originAddress}
                         onChange={e => setOriginAddress(e.target.value)}
-                        disabled={order.estado !== 'Cotizado'}
+                        disabled={order.estado !== 'Cotizado' && !isEditingAddress}
                       />
                       {mapsLoaded && (
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
@@ -1671,20 +1693,20 @@ export default function OrderDetailView() {
                       index={wpIdx}
                       value={wp}
                       mapsLoaded={mapsLoaded}
-                      disabled={order.estado !== 'Cotizado'}
+                      disabled={order.estado !== 'Cotizado' && !isEditingAddress}
                       onChange={(newVal) => {
                         const newWps = [...waypoints];
                         newWps[wpIdx] = newVal;
                         setWaypoints(newWps);
                       }}
-                      onRemove={order.estado === 'Cotizado' ? () => {
+                      onRemove={(order.estado === 'Cotizado' || isEditingAddress) ? () => {
                         const newWps = waypoints.filter((_, i) => i !== wpIdx);
                         setWaypoints(newWps);
                       } : undefined}
                     />
                   ))}
 
-                  {order.estado === 'Cotizado' && waypoints.length < 3 && (
+                  {(order.estado === 'Cotizado' || isEditingAddress) && waypoints.length < 3 && (
                     <button
                       type="button"
                       className="text-xs font-bold text-blue-600 hover:text-blue-500 flex items-center gap-1 transition-colors mt-1"
@@ -1704,7 +1726,7 @@ export default function OrderDetailView() {
                         placeholder="Ingresa dirección del paciente..."
                         value={address}
                         onChange={e => setAddress(e.target.value)}
-                        disabled={order.estado !== 'Cotizado'}
+                        disabled={order.estado !== 'Cotizado' && !isEditingAddress}
                       />
                       {mapsLoaded && (
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
@@ -1715,7 +1737,7 @@ export default function OrderDetailView() {
                   </div>
                 </div>
 
-                {order.estado === 'Cotizado' && (
+                {order.estado === 'Cotizado' ? (
                   <Button 
                     variant="primary" 
                     className="w-full text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-500 border-none py-3.5 text-white shadow-md shadow-blue-200 flex items-center justify-center gap-2" 
@@ -1734,6 +1756,52 @@ export default function OrderDetailView() {
                       </>
                     )}
                   </Button>
+                ) : (
+                  <div className="pt-2">
+                    {!isEditingAddress ? (
+                      <Button
+                        variant="secondary"
+                        className="w-full text-xs font-bold uppercase tracking-wider bg-amber-500 hover:bg-amber-400 border-none py-3 text-slate-900 shadow-md flex items-center justify-center gap-2"
+                        onClick={() => setIsEditingAddress(true)}
+                      >
+                        <Edit3 size={14} />
+                        Corregir Dirección de Entrega
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1 text-xs font-bold uppercase tracking-wider py-3 border-slate-300 hover:bg-slate-100"
+                          onClick={() => {
+                            setIsEditingAddress(false);
+                            setAddress(order.direccionEntrega || '');
+                            setWaypoints(order.waypoints || []);
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="primary"
+                          className="flex-1 text-xs font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 border-none py-3 text-white shadow-md flex items-center justify-center gap-2"
+                          onClick={() => {
+                            calculateLogistics();
+                            setIsEditingAddress(false);
+                            alert('Dirección corregida y guardada correctamente.');
+                          }}
+                          disabled={calculating}
+                        >
+                          {calculating ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            <Check size={14} />
+                          )}
+                          Guardar Corrección
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {order.costoLogistico > 0 && (

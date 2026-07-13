@@ -345,13 +345,32 @@ async function startServer() {
       // Remove Markdown formatting if Gemini included it despite responseMimeType
       jsonText = jsonText.replace(/^```(json)?/, '').replace(/```$/, '').trim();
       
-      let extractedData = {};
+      let extractedData: any = {};
       try {
         extractedData = JSON.parse(jsonText);
       } catch (parseError) {
         console.error('Failed to parse Gemini output:', jsonText);
         throw new Error('El formato devuelto por la IA fue inválido');
       }
+      
+      const uppercaseStrings = (obj: any): any => {
+        if (typeof obj === 'string') {
+          return obj.toUpperCase();
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(uppercaseStrings);
+        }
+        if (obj && typeof obj === 'object') {
+          const res: any = {};
+          for (const key of Object.keys(obj)) {
+            res[key] = uppercaseStrings(obj[key]);
+          }
+          return res;
+        }
+        return obj;
+      };
+
+      extractedData = uppercaseStrings(extractedData);
       
       res.json(extractedData);
     } catch (error: any) {
@@ -699,24 +718,107 @@ async function startServer() {
     const mailOptions = {
       from: `"DALEDMED" <${config.smtpUser}>`,
       to: recipients.join(', '),
-      subject: `Comprobante de Pago y Resumen - Pedido #${order.id}`,
-      text: `Hola ${patName},\n\nAdjuntamos el comprobante de pago y resumen de tu pedido #${order.id}.\n\nEste documento es un comprobante y resumen de lo pagado.\n\nAtentamente,\nEl equipo de DALEDMED`,
+      subject: `Confirmación de Pago y Resumen de tu Pedido #${order.id} - DALEDMED`,
+      text: `¡Hola ${patName}!\n\nEsperamos que te encuentres muy bien.\n\nQueremos agradecerte por confiar en nosotros para la gestión de tus medicamentos. Tu salud y tranquilidad son nuestra prioridad.\n\nAdjuntamos a este correo el comprobante de pago y el resumen correspondiente a tu pedido #${order.id}.\n\nResumen del Pedido:\n- ID de Pedido: #${order.id}\n- Total Abonado: $${grandTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}\n- Método de Pago: ${order.metodoPago || 'Mercado Pago'}\n\nEn caso de tener algún problema con tu entrega, comunícate al: 2615097974\n\n¿Por qué los pacientes nos vuelven a elegir?\n1. Envíos rápidos a domicilio: Llevamos tu medicación directamente a tu puerta, con todo el cuidado que corresponde.\n2. Cero burocracia con tus recetas: Nos encargamos de validar tus recetas de forma digital con tu cobertura o prepaga.\n3. Tratamientos continuos sin interrupciones: Te recordamos cuándo renovar tu receta para que nunca te quedes sin tu dosis.\n\n¿Necesitás realizar un nuevo pedido o renovar tu receta?\nRespondé directamente a este correo o comunícate al: 2615097974. ¡Estamos para acompañarte!\n\nAtentamente,\nEl equipo de DALEDMED`,
       html: `
-        <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-          <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Comprobante de Pago y Resumen</h2>
-          <p style="font-size: 14px; line-height: 1.5; color: #334155;">Hola <strong>${patName}</strong>,</p>
-          <p style="font-size: 14px; line-height: 1.5; color: #334155;">Adjuntamos a este correo el comprobante oficial de pago y el resumen correspondiente a tu pedido <strong>#${order.id}</strong>.</p>
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0 0 8px 0; font-size: 13.5px; color: #334155;"><strong>ID de Pedido:</strong> ${order.id}</p>
-            <p style="margin: 0 0 8px 0; font-size: 13.5px; color: #334155;"><strong>Total Abonado:</strong> $${grandTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</p>
-            <p style="margin: 0; font-size: 13.5px; color: #334155;"><strong>Método de pago:</strong> ${order.metodoPago || 'Mercado Pago'}</p>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #334155; max-width: 600px; margin: 0 auto; padding: 0; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <!-- Header Banner -->
+          <div style="background: linear-gradient(135deg, #0f172a, #1e293b); padding: 30px 25px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 1px;">DALEDMED</h1>
+            <p style="color: #38bdf8; margin: 6px 0 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">Cuidamos tu salud, estés donde estés</p>
           </div>
-          <p style="font-size: 11.5px; color: #64748b; font-style: italic; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center;">
-            Este documento es un comprobante y resumen de lo pagado.
-          </p>
-          <p style="font-size: 12.5px; color: #64748b; margin-top: 15px;">
-            Atentamente,<br><strong>El equipo de DALEDMED</strong>
-          </p>
+          
+          <div style="padding: 30px 25px;">
+            <!-- Greeting -->
+            <p style="font-size: 16px; line-height: 1.6; color: #0f172a; margin-top: 0;">
+              ¡Hola <strong>${patName}</strong>! Esperamos que estés muy bien.
+            </p>
+            <p style="font-size: 14.5px; line-height: 1.6; color: #475569;">
+              Queremos agradecerte profundamente por confiar en nosotros para la gestión de tus medicamentos. Tu tranquilidad y bienestar son nuestro motor diario.
+            </p>
+            
+            <p style="font-size: 14.5px; line-height: 1.6; color: #475569;">
+              Confirmamos que hemos procesado con éxito tu pago y tu pedido ya está en marcha. Adjunto a este correo vas a encontrar el comprobante en formato PDF para tu control.
+            </p>
+
+            <!-- Error or Delivery issues alert -->
+            <p style="font-size: 14px; line-height: 1.6; color: #dc2626; margin-top: 15px; padding: 10px 15px; background-color: #fef2f2; border-left: 4px solid #f87171; border-radius: 4px;">
+              <strong>¿Algún inconveniente?</strong> En caso de tener algún problema con tu entrega, comunícate de inmediato al: <strong>2615097974</strong>.
+            </p>
+
+            <!-- Order Box -->
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 25px 0;">
+              <h3 style="margin: 0 0 12px 0; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; font-weight: 700;">Resumen del Pedido</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 6px 0; font-size: 14px; color: #64748b;">ID de Pedido:</td>
+                  <td style="padding: 6px 0; font-size: 14px; color: #0f172a; text-align: right; font-weight: 600;">#${order.id}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 14px; color: #64748b;">Monto Abonado:</td>
+                  <td style="padding: 6px 0; font-size: 15px; color: #16a34a; text-align: right; font-weight: 700;">$${grandTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 14px; color: #64748b;">Método de Pago:</td>
+                  <td style="padding: 6px 0; font-size: 14px; color: #0f172a; text-align: right; font-weight: 600;">${order.metodoPago || 'Mercado Pago'}</td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Why Choose Us / Loyalty section -->
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 25px; margin-top: 25px;">
+              <h4 style="margin: 0 0 18px 0; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;">¿Por qué los pacientes nos recomiendan?</h4>
+              
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                <tr>
+                  <td style="width: 40px; vertical-align: top; font-size: 22px; padding-top: 2px; text-align: center;">🚀</td>
+                  <td style="vertical-align: top; padding-left: 12px;">
+                    <h5 style="margin: 0 0 4px 0; font-size: 14px; color: #1e293b; font-weight: 600;">Envíos directos y seguros</h5>
+                    <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5;">Llevamos tu medicación directamente a tu domicilio, con los máximos estándares de cuidado y seguridad en el transporte.</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+                <tr>
+                  <td style="width: 40px; vertical-align: top; font-size: 22px; padding-top: 2px; text-align: center;">📄</td>
+                  <td style="vertical-align: top; padding-left: 12px;">
+                    <h5 style="margin: 0 0 4px 0; font-size: 14px; color: #1e293b; font-weight: 600;">Cero burocracia con tus recetas</h5>
+                    <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5;">Nosotros nos encargamos de validar tus recetas de forma digital con tu cobertura o prepaga, ahorrándote tiempo y trámites.</p>
+                  </td>
+                </tr>
+              </table>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+                <tr>
+                  <td style="width: 40px; vertical-align: top; font-size: 22px; padding-top: 2px; text-align: center;">🔔</td>
+                  <td style="vertical-align: top; padding-left: 12px;">
+                    <h5 style="margin: 0 0 4px 0; font-size: 14px; color: #1e293b; font-weight: 600;">Tratamientos continuos</h5>
+                    <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.5;">Para que nunca interrumpas tu dosis, nos agendamos la fecha de tu próxima renovación de recetas y te lo recordamos con anticipación.</p>
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Call to Action / Help -->
+            <div style="text-align: center; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 30px 0 10px 0;">
+              <p style="margin: 0 0 6px 0; font-size: 14px; color: #166534; font-weight: 700;">¿Necesitás renovar tu medicación o hacer un nuevo pedido?</p>
+              <p style="margin: 0; font-size: 13px; color: #14532d; line-height: 1.5;">
+                Simplemente respondé a este correo o comunícate al: <strong>2615097974</strong>. ¡Estamos acá para ayudarte!
+              </p>
+            </div>
+
+            <!-- Footer Closing -->
+            <p style="font-size: 13.5px; color: #64748b; margin-top: 35px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center;">
+              Atentamente,<br>
+              <strong style="color: #0f172a; font-size: 14.5px;">El equipo de DALEDMED</strong>
+            </p>
+          </div>
+          
+          <!-- Bottom Accent -->
+          <div style="background-color: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <p style="margin: 0; font-size: 11px; color: #94a3b8;">Este correo electrónico contiene información de su pedido. Por favor, no lo comparta.</p>
+          </div>
         </div>
       `,
       attachments: [
