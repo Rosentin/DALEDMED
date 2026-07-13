@@ -82,6 +82,7 @@ export interface Order {
   driverLastUpdated?: string | null;
   linkPagoUrl?: string;
   qrString?: string;
+  recetaLink?: string;
   detallesPago?: string;
   bankInfoUsada?: string;
   localidad?: string;

@@ -77,6 +77,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   // Gemini Setup - Lazy Initialization to prevent module load issues
   let aiInstance: GoogleGenAI | null = null;
@@ -243,6 +244,8 @@ async function startServer() {
            - dosis (string o null)
            - cantidad (string o null, extrae el número de unidades, Ej si dice "1 (uno)" extrae solo "1")
         - diagnostico (string o null)
+        - qrString (string o null): decodifica o extrae la URL exacta u original detrás del código QR presente en la receta digital (suele estar abajo, en la esquina o al lado de "Ver Link"). No la modifiques ni cambies sus mayúsculas/minúsculas.
+        - recetaLink (string o null): extrae el enlace, URL completa o dirección web detrás del texto/hipervínculo "Ver Link" presente en la receta. No lo modifiques en absoluto, mantén las mayúsculas/minúsculas originales.
         
         Solo devuelve JSON, ninguna otra respuesta.
       `;
@@ -280,6 +283,8 @@ async function startServer() {
                     matricula: { type: Type.STRING, description: 'Matrícula profesional del médico' },
                     fecha: { type: Type.STRING, description: 'Fecha de la prescripción' },
                     diagnostico: { type: Type.STRING, description: 'Diagnóstico médico si figura' },
+                    qrString: { type: Type.STRING, description: 'URL o texto exacto y original del código QR de la receta' },
+                    recetaLink: { type: Type.STRING, description: 'URL exacta y original del hipervínculo Ver Link' },
                     medicamentos: {
                       type: Type.ARRAY,
                       description: 'Lista de medicamentos recetados',
@@ -335,6 +340,24 @@ async function startServer() {
         throw lastError || new Error('No models were able to process the prescription');
       }
 
+      let permanentFilename = '';
+      if (req.file) {
+        try {
+          const originalExt = path.extname(req.file.originalname) || '.png';
+          permanentFilename = `receta-${Date.now()}-${Math.floor(Math.random() * 10000)}${originalExt}`;
+          const permanentPath = path.join(process.cwd(), 'uploads', permanentFilename);
+          
+          const uploadsDir = path.join(process.cwd(), 'uploads');
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+
+          fs.copyFileSync(req.file.path, permanentPath);
+        } catch (copyErr) {
+          console.error('Failed to copy uploaded prescription permanently:', copyErr);
+        }
+      }
+
       // Cleanup temp file if success
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
@@ -353,17 +376,24 @@ async function startServer() {
         throw new Error('El formato devuelto por la IA fue inválido');
       }
       
-      const uppercaseStrings = (obj: any): any => {
+      if (permanentFilename) {
+        extractedData.recetaUrl = `/uploads/${permanentFilename}`;
+      }
+      
+      const uppercaseStrings = (obj: any, keyName?: string): any => {
+        if (keyName === 'qrString' || keyName === 'recetaLink' || keyName === 'verLink' || keyName === 'recetaUrl') {
+          return obj;
+        }
         if (typeof obj === 'string') {
           return obj.toUpperCase();
         }
         if (Array.isArray(obj)) {
-          return obj.map(uppercaseStrings);
+          return obj.map(item => uppercaseStrings(item, keyName));
         }
         if (obj && typeof obj === 'object') {
           const res: any = {};
           for (const key of Object.keys(obj)) {
-            res[key] = uppercaseStrings(obj[key]);
+            res[key] = uppercaseStrings(obj[key], key);
           }
           return res;
         }

@@ -118,6 +118,7 @@ interface AppState {
   updateUser: (id: string, updates: Partial<User>) => void;
   updateConfig: (key: string, value: any) => void;
   deleteOrder: (id: string) => void;
+  renameOrderLocalityAndId: (id: string, newLocality: string) => Promise<string>;
 }
 
 export const ALL_PERMISSIONS = [
@@ -265,6 +266,47 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   deleteOrder: (id) => {
     deleteDoc(doc(db, 'orders', id)).catch(e => handleFirestoreError(e, OperationType.DELETE, 'orders/' + id));
+  },
+
+  renameOrderLocalityAndId: async (id, newLocality) => {
+    const state = get();
+    const orderIndex = state.orders.findIndex(o => o.id === id);
+    if (orderIndex === -1) return id;
+
+    const order = state.orders[orderIndex];
+    // Generate new ID based on existing name, DNI and new locality
+    const newId = generateOrderId(
+      order.pacienteNombre || order.pacienteId || '',
+      order.dni || '',
+      newLocality
+    );
+
+    if (newId === id) {
+      // If the ID is the same, just update the locality field
+      await updateDoc(doc(db, 'orders', id), { localidad: newLocality });
+      return id;
+    }
+
+    const newOrder = {
+      ...order,
+      id: newId,
+      localidad: newLocality,
+      historialCambios: [
+        ...order.historialCambios,
+        {
+          timestamp: new Date().toISOString(),
+          userId: state.currentUser?.id || 'sys',
+          action: 'Renamed Order ID',
+          details: `ID cambiado de ${id} a ${newId} por actualización de localidad a ${newLocality}`
+        }
+      ]
+    };
+
+    // Write new doc and delete old doc in Firestore
+    await setDoc(doc(db, 'orders', newId), newOrder);
+    await deleteDoc(doc(db, 'orders', id));
+
+    return newId;
   }
 }));
 

@@ -19,12 +19,16 @@ export default function CreateOrderView() {
   const [pacienteId, setPacienteId] = useState('');
   const [dni, setDni] = useState('');
   const [localidad, setLocalidad] = useState('Mendoza');
+  const [direccionEntrega, setDireccionEntrega] = useState('');
+  const [recetaUrl, setRecetaUrl] = useState('');
   const [obraSocial, setObraSocial] = useState('');
   const [numeroAfiliado, setNumeroAfiliado] = useState('');
   const [medico, setMedico] = useState('');
   const [matriculaMedico, setMatriculaMedico] = useState('');
   const [token, setToken] = useState('');
   const [diagnostico, setDiagnostico] = useState('');
+  const [qrString, setQrString] = useState('');
+  const [recetaLink, setRecetaLink] = useState('');
   const [medicamentos, setMedicamentos] = useState<MedicationRequest[]>([]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,6 +99,9 @@ export default function CreateOrderView() {
           if (data.medicoPrescriptor) setMedico(data.medicoPrescriptor);
           if (data.matricula) setMatriculaMedico(data.matricula);
           if (data.diagnostico) setDiagnostico(data.diagnostico);
+          if (data.qrString) setQrString(data.qrString);
+          if (data.recetaLink) setRecetaLink(data.recetaLink);
+          if (data.recetaUrl) setRecetaUrl(data.recetaUrl);
           
           if (data.medicamentos && Array.isArray(data.medicamentos)) {
             setMedicamentos(data.medicamentos.map((m: any) => {
@@ -141,11 +148,15 @@ export default function CreateOrderView() {
       pacienteNombre: pacienteId.trim().toUpperCase(),
       dni: dni.trim().toUpperCase(),
       localidad: localidad.trim().toUpperCase(),
+      direccionEntrega: direccionEntrega.trim(),
+      recetaUrl: recetaUrl,
       numeroAfiliado: numeroAfiliado.trim().toUpperCase(),
       obraSocial: obraSocial.trim().toUpperCase(),
       medico: medico ? medico.trim().toUpperCase() : null,
       matriculaMedico: matriculaMedico.trim().toUpperCase(),
       token: token.trim().toUpperCase(),
+      qrString: qrString.trim(),
+      recetaLink: recetaLink.trim(),
       medicamentos: medicamentos.map(m => ({
         ...m,
         nombre: m.nombre.trim().toUpperCase(),
@@ -233,11 +244,16 @@ export default function CreateOrderView() {
                   <Input label="DNI" value={dni} onChange={e => setDni(e.target.value)} />
                   <Input label="Localidad" value={localidad} onChange={e => setLocalidad(e.target.value)} required />
                   <Input label="Obra Social" value={obraSocial} onChange={e => setObraSocial(e.target.value)} required />
+                  <div className="col-span-2">
+                    <Input label="Dirección de Entrega (Destino)" value={direccionEntrega} onChange={e => setDireccionEntrega(e.target.value)} placeholder="Ej: Av. San Martín 450, Mendoza" />
+                  </div>
                   <Input label="N° Afiliado" value={numeroAfiliado} onChange={e => setNumeroAfiliado(e.target.value)} />
                   <Input label="Médico" value={medico} onChange={e => setMedico(e.target.value)} />
                   <Input label="Matrícula" value={matriculaMedico} onChange={e => setMatriculaMedico(e.target.value)} />
                   <Input label="Token (Dictado)" value={token} onChange={e => setToken(e.target.value)} required />
                   <Input label="Diagnóstico" value={diagnostico} onChange={e => setDiagnostico(e.target.value)} />
+                  <Input label="Datos QR / Enlace QR" value={qrString} onChange={e => setQrString(e.target.value)} />
+                  <Input label="Ver Link (URL de Validación)" value={recetaLink} onChange={e => setRecetaLink(e.target.value)} />
                 </div>
                 
                 <div>

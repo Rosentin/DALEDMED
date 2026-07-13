@@ -162,12 +162,14 @@ export default function OrderDetailView() {
     bankCbu,
     bankAlias,
     bankTitular,
-    mercadoPagoAccessToken
+    mercadoPagoAccessToken,
+    renameOrderLocalityAndId
   } = useAppStore();
   
   const order = orders.find(o => o.id === id);
   
   const [address, setAddress] = useState(order?.direccionEntrega || '');
+  const [localidad, setLocalidad] = useState(order?.localidad || 'Mendoza');
   const [distance, setDistance] = useState<number>(order?.distanciaKm || 0);
   const [waypoints, setWaypoints] = useState<string[]>(order?.waypoints || []);
 
@@ -289,6 +291,7 @@ export default function OrderDetailView() {
   useEffect(() => {
     if (order) {
       setAddress(order.direccionEntrega || '');
+      setLocalidad(order.localidad || 'Mendoza');
       setDistance(order.distanciaKm || 0);
       setWaypoints(order.waypoints || []);
       setEmailInput(order.pacienteEmail || '');
@@ -938,10 +941,23 @@ export default function OrderDetailView() {
   };
 
   // Logistics & Pricing (Admin)
-  const calculateLogistics = () => {
+  const calculateLogistics = async () => {
     if (!address) {
       alert('Por favor ingrese una dirección de entrega primero.');
       return;
+    }
+
+    let currentId = order.id;
+    const cleanLocalidad = localidad.trim().toUpperCase();
+    if (cleanLocalidad !== (order.localidad || '').trim().toUpperCase()) {
+      try {
+        currentId = await renameOrderLocalityAndId(order.id, cleanLocalidad);
+        if (currentId !== order.id) {
+          navigate(`/orders/${currentId}`, { replace: true });
+        }
+      } catch (renameErr) {
+        console.error('Error migrating order ID after locality change:', renameErr);
+      }
     }
 
     const hasRealMaps = mapsLoaded && (window as any).google?.maps;
@@ -953,7 +969,8 @@ export default function OrderDetailView() {
       const totalDist = baseDistance + additionalStopsDistance;
       setDistance(totalDist);
       const logisticCost = baseLogisticsCost + (totalDist * perKmLogisticsCost);
-      updateOrder(order.id, {
+      updateOrder(currentId, {
+        localidad: cleanLocalidad,
         direccionEntrega: address,
         distanciaKm: totalDist,
         costoLogistico: logisticCost,
@@ -1000,7 +1017,8 @@ export default function OrderDetailView() {
             const dLat = lastLeg.end_location.lat();
             const dLng = lastLeg.end_location.lng();
 
-            updateOrder(order.id, {
+            updateOrder(currentId, {
+              localidad: cleanLocalidad,
               direccionEntrega: address,
               distanciaKm: distInKm,
               costoLogistico: logisticCost,
@@ -1029,9 +1047,10 @@ export default function OrderDetailView() {
             setDistance(totalDist);
             const logisticCost = baseLogisticsCost + (totalDist * perKmLogisticsCost);
             
-            const fallbackCoords = getDeterministicMendozaCoords(order.id);
+            const fallbackCoords = getDeterministicMendozaCoords(currentId);
 
-            updateOrder(order.id, {
+            updateOrder(currentId, {
+              localidad: cleanLocalidad,
               direccionEntrega: address,
               distanciaKm: totalDist,
               costoLogistico: logisticCost,
@@ -1053,7 +1072,8 @@ export default function OrderDetailView() {
       const totalDist = baseDistance + (waypoints.filter(w => w.trim() !== '').length * 4);
       setDistance(totalDist);
       const logisticCost = baseLogisticsCost + (totalDist * perKmLogisticsCost);
-      updateOrder(order.id, {
+      updateOrder(currentId, {
+        localidad: cleanLocalidad,
         direccionEntrega: address,
         distanciaKm: totalDist,
         costoLogistico: logisticCost,
@@ -1214,6 +1234,99 @@ export default function OrderDetailView() {
                 <div className="col-span-2 bg-blue-50/30 p-3 rounded-lg border border-blue-100/50">
                   <p className="text-blue-700 text-[10px] uppercase tracking-wider font-bold mb-0.5">Diagnóstico Extraído / Registrado</p>
                   <p className="font-semibold text-blue-900 text-sm">{order.diagnostico}</p>
+                </div>
+              )}
+
+              {order.recetaUrl && (
+                <div className="col-span-2 bg-slate-50/50 p-4 rounded-xl border border-slate-200/60 mt-2 space-y-3">
+                  <p className="text-slate-800 text-[10px] uppercase tracking-wider font-extrabold flex items-center gap-1.5">
+                    <FileText size={13} className="text-slate-600" />
+                    Imagen de la Receta / Código QR Cargado
+                  </p>
+                  <div className="bg-white p-3 rounded-lg border border-slate-200/60 shadow-sm flex flex-col items-center">
+                    {order.recetaUrl.toLowerCase().endsWith('.pdf') ? (
+                      <div className="w-full flex flex-col items-center gap-2 py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        <FileText size={48} className="text-rose-500" />
+                        <span className="text-xs font-semibold text-slate-700">Receta en formato PDF</span>
+                        <a
+                          href={order.recetaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm mt-1 transition-colors"
+                        >
+                          Ver PDF de la Receta <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center w-full">
+                        <div className="relative group max-w-lg overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-1">
+                          <img 
+                            src={order.recetaUrl} 
+                            alt="Foto Receta QR" 
+                            className="max-h-96 object-contain rounded-md transition-transform duration-300 hover:scale-[1.02]"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <a
+                          href={order.recetaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer"
+                        >
+                          Ver Imagen Completa <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(order.qrString || order.recetaLink) && (
+                <div className="col-span-2 bg-emerald-50/40 p-4 rounded-xl border border-emerald-100 mt-2 space-y-3">
+                  <p className="text-emerald-800 text-[10px] uppercase tracking-wider font-extrabold flex items-center gap-1.5">
+                    <CheckCircle size={13} className="text-emerald-600" />
+                    Validación Digital de Receta
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {order.qrString && (
+                      <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-1">Datos QR Receta</p>
+                          <p className="font-mono text-xs text-slate-800 break-all select-all font-medium leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 max-h-24 overflow-y-auto">
+                            {order.qrString}
+                          </p>
+                        </div>
+                        {order.qrString.startsWith('http') && (
+                          <a 
+                            href={order.qrString} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer select-none inline-flex items-center"
+                          >
+                            Ir a Enlace QR <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {order.recetaLink && (
+                      <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-1">Enlace de Validación (Ver Link)</p>
+                          <p className="font-mono text-xs text-slate-800 break-all select-all font-medium leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 max-h-24 overflow-y-auto">
+                            {order.recetaLink}
+                          </p>
+                        </div>
+                        <a 
+                          href={order.recetaLink.startsWith('http') ? order.recetaLink : `https://${order.recetaLink}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer select-none inline-flex items-center"
+                        >
+                          Abrir Ver Link <ExternalLink size={12} />
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               
@@ -1755,23 +1868,37 @@ export default function OrderDetailView() {
                     </button>
                   )}
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Dirección de Entrega (Destino)</label>
-                    <div className="relative">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Localidad de Entrega</label>
                       <input
                         type="text"
-                        ref={autocompleteInputRef as any}
                         className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-900"
-                        placeholder="Ingresa dirección del paciente..."
-                        value={address}
-                        onChange={e => setAddress(e.target.value)}
+                        placeholder="Ej: MENDOZA, SAN RAFAEL..."
+                        value={localidad}
+                        onChange={e => setLocalidad(e.target.value)}
                         disabled={order.estado !== 'Cotizado' && !isEditingAddress}
                       />
-                      {mapsLoaded && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                          Auto-complete
-                        </span>
-                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Dirección de Entrega (Destino)</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          ref={autocompleteInputRef as any}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold text-slate-900"
+                          placeholder="Ingresa dirección del paciente..."
+                          value={address}
+                          onChange={e => setAddress(e.target.value)}
+                          disabled={order.estado !== 'Cotizado' && !isEditingAddress}
+                        />
+                        {mapsLoaded && (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                            Auto-complete
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
