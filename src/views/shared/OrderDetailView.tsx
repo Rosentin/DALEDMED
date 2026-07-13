@@ -838,13 +838,63 @@ export default function OrderDetailView() {
     try {
       if (autocompleteInputRef.current) {
         const autocomplete = new (window as any).google.maps.places.Autocomplete(autocompleteInputRef.current, {
-          fields: ['formatted_address', 'geometry']
+          fields: ['formatted_address', 'geometry', 'address_components']
         });
 
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace();
           if (place.formatted_address) {
-            setAddress(place.formatted_address);
+            const selectedAddress = place.formatted_address;
+            setAddress(selectedAddress);
+
+            // Sincronización Inteligente de Localidad y Distrito de Mendoza
+            let extractedLocality = 'Mendoza';
+            if (place.address_components) {
+              let sublocality = '';
+              let locality = '';
+              let adminArea2 = '';
+
+              for (const component of place.address_components) {
+                const types = component.types;
+                if (types.includes('sublocality_level_1') || types.includes('sublocality')) {
+                  sublocality = component.long_name;
+                } else if (types.includes('locality')) {
+                  locality = component.long_name;
+                } else if (types.includes('administrative_area_level_2')) {
+                  adminArea2 = component.long_name;
+                }
+              }
+
+              const mendozaDepts = [
+                'godoy cruz', 'guaymallen', 'las heras', 'maipu', 'lujan de cuyo', 
+                'san rafael', 'san martin', 'rivadavia', 'junin', 'santa rosa', 
+                'la paz', 'lavalle', 'tunuyan', 'tupungato', 'san carlos', 
+                'general alvear', 'malargue', 'capital'
+              ];
+
+              const candidate1 = (adminArea2 || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const candidate2 = (locality || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const candidate3 = (sublocality || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+              if (mendozaDepts.some(d => candidate1.includes(d))) {
+                extractedLocality = adminArea2;
+              } else if (mendozaDepts.some(d => candidate2.includes(d))) {
+                extractedLocality = locality;
+              } else if (mendozaDepts.some(d => candidate3.includes(d))) {
+                extractedLocality = sublocality;
+              } else {
+                extractedLocality = adminArea2 || locality || sublocality || 'Mendoza';
+              }
+
+              if (extractedLocality.toLowerCase() === 'capital') {
+                extractedLocality = 'Mendoza';
+              }
+            }
+
+            setLocalidad(extractedLocality);
+
+            // AUTOMATICALLY calculate logistics, rename ID, and sync in background!
+            calculateLogistics(selectedAddress, extractedLocality);
           }
         });
 
@@ -941,19 +991,23 @@ export default function OrderDetailView() {
   };
 
   // Logistics & Pricing (Admin)
-  const calculateLogistics = async () => {
-    if (!address) {
+  const calculateLogistics = async (customAddress?: string, customLocalidad?: string) => {
+    const targetAddress = customAddress !== undefined ? customAddress : address;
+    const targetLocalidad = customLocalidad !== undefined ? customLocalidad : localidad;
+
+    if (!targetAddress) {
       alert('Por favor ingrese una dirección de entrega primero.');
       return;
     }
 
     let currentId = order.id;
-    const cleanLocalidad = localidad.trim().toUpperCase();
+    const cleanLocalidad = targetLocalidad.trim().toUpperCase();
     if (cleanLocalidad !== (order.localidad || '').trim().toUpperCase()) {
       try {
         currentId = await renameOrderLocalityAndId(order.id, cleanLocalidad);
         if (currentId !== order.id) {
-          navigate(`/orders/${currentId}`, { replace: true });
+          const basePath = location.pathname.startsWith('/queue') ? '/queue' : '/orders';
+          navigate(`${basePath}/${currentId}`, { replace: true });
         }
       } catch (renameErr) {
         console.error('Error migrating order ID after locality change:', renameErr);
@@ -971,7 +1025,7 @@ export default function OrderDetailView() {
       const logisticCost = baseLogisticsCost + (totalDist * perKmLogisticsCost);
       updateOrder(currentId, {
         localidad: cleanLocalidad,
-        direccionEntrega: address,
+        direccionEntrega: targetAddress,
         distanciaKm: totalDist,
         costoLogistico: logisticCost,
         waypoints: waypoints
@@ -994,7 +1048,7 @@ export default function OrderDetailView() {
       directionsService.route(
         {
           origin: originAddress,
-          destination: address,
+          destination: targetAddress,
           waypoints: formattedWaypoints,
           optimizeWaypoints: true,
           travelMode: google.maps.TravelMode.DRIVING,
@@ -1019,7 +1073,7 @@ export default function OrderDetailView() {
 
             updateOrder(currentId, {
               localidad: cleanLocalidad,
-              direccionEntrega: address,
+              direccionEntrega: targetAddress,
               distanciaKm: distInKm,
               costoLogistico: logisticCost,
               waypoints: waypoints,
@@ -1051,7 +1105,7 @@ export default function OrderDetailView() {
 
             updateOrder(currentId, {
               localidad: cleanLocalidad,
-              direccionEntrega: address,
+              direccionEntrega: targetAddress,
               distanciaKm: totalDist,
               costoLogistico: logisticCost,
               waypoints: waypoints,
@@ -1060,7 +1114,7 @@ export default function OrderDetailView() {
             });
 
             // Try to draw fallback path
-            simulateCoordinatesFallback(originAddress, address, waypoints);
+            simulateCoordinatesFallback(originAddress, targetAddress, waypoints);
           }
         }
       );
@@ -1074,7 +1128,7 @@ export default function OrderDetailView() {
       const logisticCost = baseLogisticsCost + (totalDist * perKmLogisticsCost);
       updateOrder(currentId, {
         localidad: cleanLocalidad,
-        direccionEntrega: address,
+        direccionEntrega: targetAddress,
         distanciaKm: totalDist,
         costoLogistico: logisticCost,
         waypoints: waypoints
@@ -1281,51 +1335,47 @@ export default function OrderDetailView() {
                 </div>
               )}
 
-              {(order.qrString || order.recetaLink) && (
+              {(order.qrString || order.recetaLink || order.recetaUrl) && (
                 <div className="col-span-2 bg-emerald-50/40 p-4 rounded-xl border border-emerald-100 mt-2 space-y-3">
                   <p className="text-emerald-800 text-[10px] uppercase tracking-wider font-extrabold flex items-center gap-1.5">
                     <CheckCircle size={13} className="text-emerald-600" />
                     Validación Digital de Receta
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {order.qrString && (
-                      <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col justify-between">
-                        <div>
-                          <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-1">Datos QR Receta</p>
-                          <p className="font-mono text-xs text-slate-800 break-all select-all font-medium leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 max-h-24 overflow-y-auto">
-                            {order.qrString}
-                          </p>
-                        </div>
-                        {order.qrString.startsWith('http') && (
-                          <a 
-                            href={order.qrString} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer select-none inline-flex items-center"
-                          >
-                            Ir a Enlace QR <ExternalLink size={12} />
-                          </a>
-                        )}
+                    <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col items-center justify-center">
+                      <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-2 text-center w-full">Datos QR Receta</p>
+                      <div className="bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center justify-center shadow-inner">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(
+                            order.qrString && order.qrString !== 'null' ? order.qrString : (order.recetaLink && order.recetaLink !== 'null' ? order.recetaLink : order.recetaUrl || 'https://daledmed.com')
+                          )}`} 
+                          alt="Código QR de la Receta" 
+                          className="w-28 h-28 object-contain"
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
-                    )}
-                    {order.recetaLink && (
-                      <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col justify-between">
-                        <div>
-                          <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-1">Enlace de Validación (Ver Link)</p>
-                          <p className="font-mono text-xs text-slate-800 break-all select-all font-medium leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 max-h-24 overflow-y-auto">
-                            {order.recetaLink}
-                          </p>
-                        </div>
-                        <a 
-                          href={order.recetaLink.startsWith('http') ? order.recetaLink : `https://${order.recetaLink}`} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer select-none inline-flex items-center"
-                        >
-                          Abrir Ver Link <ExternalLink size={12} />
-                        </a>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-emerald-200/60 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider font-bold mb-1">Enlace de Validación (Ver Link)</p>
+                        <p className="font-mono text-xs text-slate-800 break-all select-all font-medium leading-relaxed bg-slate-50 p-2 rounded border border-slate-100 max-h-24 overflow-y-auto">
+                          {order.recetaLink && order.recetaLink !== 'null' ? order.recetaLink : order.recetaUrl}
+                        </p>
                       </div>
-                    )}
+                      <a 
+                        href={(() => {
+                          const link = order.recetaLink && order.recetaLink !== 'null' ? order.recetaLink : order.recetaUrl;
+                          if (!link) return '#';
+                          return link.startsWith('http') ? link : `https://${link}`;
+                        })()} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-bold uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer select-none inline-flex items-center"
+                      >
+                        Abrir Ver Link <ExternalLink size={12} />
+                      </a>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1907,7 +1957,7 @@ export default function OrderDetailView() {
                   <Button 
                     variant="primary" 
                     className="w-full text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-500 border-none py-3.5 text-white shadow-md shadow-blue-200 flex items-center justify-center gap-2" 
-                    onClick={calculateLogistics}
+                    onClick={() => calculateLogistics()}
                     disabled={calculating}
                   >
                     {calculating ? (

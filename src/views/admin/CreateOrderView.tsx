@@ -242,18 +242,12 @@ export default function CreateOrderView() {
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Paciente (Nombre)" value={pacienteId} onChange={e => setPacienteId(e.target.value)} required />
                   <Input label="DNI" value={dni} onChange={e => setDni(e.target.value)} />
-                  <Input label="Localidad" value={localidad} onChange={e => setLocalidad(e.target.value)} required />
                   <Input label="Obra Social" value={obraSocial} onChange={e => setObraSocial(e.target.value)} required />
-                  <div className="col-span-2">
-                    <Input label="Dirección de Entrega (Destino)" value={direccionEntrega} onChange={e => setDireccionEntrega(e.target.value)} placeholder="Ej: Av. San Martín 450, Mendoza" />
-                  </div>
                   <Input label="N° Afiliado" value={numeroAfiliado} onChange={e => setNumeroAfiliado(e.target.value)} />
                   <Input label="Médico" value={medico} onChange={e => setMedico(e.target.value)} />
                   <Input label="Matrícula" value={matriculaMedico} onChange={e => setMatriculaMedico(e.target.value)} />
                   <Input label="Token (Dictado)" value={token} onChange={e => setToken(e.target.value)} required />
                   <Input label="Diagnóstico" value={diagnostico} onChange={e => setDiagnostico(e.target.value)} />
-                  <Input label="Datos QR / Enlace QR" value={qrString} onChange={e => setQrString(e.target.value)} />
-                  <Input label="Ver Link (URL de Validación)" value={recetaLink} onChange={e => setRecetaLink(e.target.value)} />
                 </div>
                 
                 <div>

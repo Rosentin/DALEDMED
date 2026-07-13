@@ -70,6 +70,38 @@ function getDeterministicMendozaCoords(id: string) {
 
 export default function DashboardView() {
   const allOrders = useAppStore(state => state.orders);
+  
+  // Group orders by locality/district
+  const ordersByLocality: Record<string, { count: number; revenue: number; orders: any[] }> = {};
+  allOrders.forEach(o => {
+    let rawLocality = (o.localidad || 'Mendoza').trim();
+    if (rawLocality.toLowerCase() === 'capital') {
+      rawLocality = 'Mendoza';
+    }
+    const normLocality = rawLocality.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!ordersByLocality[normLocality]) {
+      ordersByLocality[normLocality] = { count: 0, revenue: 0, orders: [] };
+    }
+    ordersByLocality[normLocality].count += 1;
+    ordersByLocality[normLocality].orders.push(o);
+    
+    // Sum revenue if paid
+    if (['Pagado', 'En preparación', 'En reparto', 'Entregado'].includes(o.estado)) {
+      const medsCost = o.medicamentos.reduce((acc: number, m: any) => acc + (m.precioFinal || 0), 0);
+      ordersByLocality[normLocality].revenue += medsCost + (o.costoLogistico || 0);
+    }
+  });
+
+  const totalAllOrders = allOrders.length || 1;
+  const localityStats = Object.entries(ordersByLocality).map(([name, data]) => {
+    return {
+      name: name || 'MENDOZA',
+      count: data.count,
+      revenue: data.revenue,
+      percentage: ((data.count / totalAllOrders) * 100).toFixed(1)
+    };
+  }).sort((a, b) => b.count - a.count);
+
   const currentUser = useAppStore(state => state.currentUser);
   const navigate = useNavigate();
   
@@ -1191,6 +1223,101 @@ export default function DashboardView() {
               </Card>
             </div>
           </div>
+
+          {/* Estadísticas de Pedidos por Zona y Localidad */}
+          <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+            <div className="p-6 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-bold text-slate-950 text-base flex items-center gap-2">
+                  <Map className="text-blue-600" size={18} /> Estadísticas de Distribución y Ventas por Zona (Mendoza)
+                </h3>
+                <p className="text-slate-400 text-xs mt-0.5">Procedencia y volumen geográfico de todos los pedidos y repartos del sistema.</p>
+              </div>
+              <Badge variant="info" className="px-3 py-1 font-bold text-xs uppercase tracking-wider">
+                {localityStats.length} {localityStats.length === 1 ? 'Zona Detectada' : 'Zonas Detectadas'}
+              </Badge>
+            </div>
+            
+            <div className="p-6">
+              {localityStats.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 text-sm">
+                  Aún no se han registrado localidades en los pedidos.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Left panel: List / Table of zones */}
+                  <div className="space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Desglose de Zonas Activas</p>
+                    <div className="border border-slate-150 rounded-xl overflow-hidden divide-y divide-slate-100 bg-slate-50/30">
+                      {localityStats.map((stat, i) => (
+                        <div key={i} className="p-4 flex items-center justify-between text-sm hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0 text-xs">
+                              {i + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-900 truncate uppercase tracking-tight">{stat.name}</p>
+                              <p className="text-[11px] text-slate-400 font-medium">Recaudado: <span className="text-emerald-600 font-bold">${stat.revenue.toLocaleString()}</span></p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="text-right">
+                              <p className="font-extrabold text-slate-900">{stat.count} <span className="text-[10px] text-slate-400 font-bold uppercase">{stat.count === 1 ? 'ped' : 'peds'}</span></p>
+                              <p className="text-[11px] text-slate-400 font-mono font-bold">{stat.percentage}%</p>
+                            </div>
+                            <ChevronRight size={16} className="text-slate-300" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Right panel: Graphical distribution map status indicator */}
+                  <div className="flex flex-col justify-between space-y-6">
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Participación y Crecimiento de Distribución</p>
+                      <div className="space-y-4">
+                        {localityStats.slice(0, 5).map((stat, i) => {
+                          const barColors = [
+                            'bg-blue-600 shadow-blue-100', 
+                            'bg-indigo-500 shadow-indigo-100', 
+                            'bg-purple-500 shadow-purple-100', 
+                            'bg-teal-500 shadow-teal-100', 
+                            'bg-amber-500 shadow-amber-100'
+                          ];
+                          const colorClass = barColors[i % barColors.length];
+                          return (
+                            <div key={i} className="space-y-1.5">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-slate-700 uppercase tracking-tight flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-slate-300"></span> {stat.name}
+                                </span>
+                                <span className="font-mono text-slate-500 font-bold">{stat.percentage}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-500 ${colorClass}`} style={{ width: `${stat.percentage}%` }}></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 flex items-start gap-3">
+                      <Compass size={18} className="text-blue-500 mt-0.5 shrink-0" />
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">Dirección de Repartos</p>
+                        <p className="text-[11px] text-blue-700 leading-relaxed font-semibold">
+                          Estos datos se sincronizan automáticamente cuando configuras la dirección de entrega de cada paciente utilizando el buscador de Google Maps. El sistema detecta el distrito correcto y actualiza las estadísticas en tiempo real.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
 
           {/* Audit Log Tracker / Transparency Feed (Moved permanently to Team Admin only!) */}
           <Card className="border-slate-200 shadow-sm overflow-hidden">

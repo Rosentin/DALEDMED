@@ -71,10 +71,50 @@ const generateOrderId = (fullName: string, dni: string, locality: string): strin
   // 2 letters of locality
   const cleanLocality = (locality || 'Mendoza').trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   let locality2 = 'ME'; // default Mendoza
-  if (cleanLocality.length >= 2) {
-    locality2 = cleanLocality.substring(0, 2);
-  } else if (cleanLocality.length === 1) {
-    locality2 = cleanLocality + 'X';
+  
+  if (cleanLocality.includes('GODOY CRUZ')) {
+    locality2 = 'GC';
+  } else if (cleanLocality.includes('GUAYMALLEN')) {
+    locality2 = 'GY';
+  } else if (cleanLocality.includes('LAS HERAS')) {
+    locality2 = 'LH';
+  } else if (cleanLocality.includes('LUJAN DE CUYO')) {
+    locality2 = 'LC';
+  } else if (cleanLocality.includes('MAIPU')) {
+    locality2 = 'MA';
+  } else if (cleanLocality.includes('SAN MARTIN')) {
+    locality2 = 'SM';
+  } else if (cleanLocality.includes('SAN RAFAEL')) {
+    locality2 = 'SR';
+  } else if (cleanLocality.includes('RIVADAVIA')) {
+    locality2 = 'RI';
+  } else if (cleanLocality.includes('JUNIN')) {
+    locality2 = 'JU';
+  } else if (cleanLocality.includes('SANTA ROSA')) {
+    locality2 = 'ST';
+  } else if (cleanLocality.includes('LA PAZ')) {
+    locality2 = 'LP';
+  } else if (cleanLocality.includes('LAVALLE')) {
+    locality2 = 'LV';
+  } else if (cleanLocality.includes('TUNUYAN')) {
+    locality2 = 'TY';
+  } else if (cleanLocality.includes('TUPUNGATO')) {
+    locality2 = 'TG';
+  } else if (cleanLocality.includes('SAN CARLOS')) {
+    locality2 = 'SC';
+  } else if (cleanLocality.includes('GENERAL ALVEAR')) {
+    locality2 = 'GA';
+  } else if (cleanLocality.includes('MALARGUE')) {
+    locality2 = 'ML';
+  } else if (cleanLocality.includes('CAPITAL') || cleanLocality === 'MENDOZA') {
+    locality2 = 'MZ';
+  } else {
+    // Fallback if not specifically matched
+    if (cleanLocality.length >= 2) {
+      locality2 = cleanLocality.substring(0, 2);
+    } else if (cleanLocality.length === 1) {
+      locality2 = cleanLocality + 'X';
+    }
   }
 
   return `${firstLetterName}${firstLetterSurname}${last3Dni}${locality2}`;
