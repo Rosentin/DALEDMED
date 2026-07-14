@@ -974,39 +974,47 @@ export default function DashboardView() {
             {/* Financial Panel */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="border-emerald-200 bg-emerald-50/30">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-emerald-700 mb-2">
-                    <DollarSign size={16} />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest">Facturado</h3>
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center justify-center text-center h-full">
+                  <div className="flex items-center gap-1.5 text-emerald-700 mb-2.5">
+                    <DollarSign size={15} />
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-widest">Facturado</h3>
                   </div>
-                  <p className="text-xl font-black text-slate-900">${totalFacturado.toLocaleString()}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-black text-slate-900 leading-none tracking-tight">
+                    ${totalFacturado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </CardContent>
               </Card>
               <Card className="border-slate-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-slate-500 mb-2">
-                    <Package size={16} />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest">Medicamentos</h3>
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center justify-center text-center h-full">
+                  <div className="flex items-center gap-1.5 text-slate-500 mb-2.5">
+                    <Package size={15} />
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-widest">Medicamentos</h3>
                   </div>
-                  <p className="text-xl font-bold text-slate-700">${totalMedicamentosFacturado.toLocaleString()}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-slate-700 leading-none tracking-tight">
+                    ${totalMedicamentosFacturado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </CardContent>
               </Card>
               <Card className="border-slate-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-slate-500 mb-2">
-                    <Truck size={16} />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest">Logística</h3>
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center justify-center text-center h-full">
+                  <div className="flex items-center gap-1.5 text-slate-500 mb-2.5">
+                    <Truck size={15} />
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-widest">Logística</h3>
                   </div>
-                  <p className="text-xl font-bold text-slate-700">${totalLogisticaFacturado.toLocaleString()}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-bold text-slate-700 leading-none tracking-tight">
+                    ${totalLogisticaFacturado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </CardContent>
               </Card>
               <Card className="border-indigo-200 bg-indigo-50/30">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-indigo-700 mb-2">
-                    <TrendingUp size={16} />
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest">Ganancia</h3>
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center justify-center text-center h-full">
+                  <div className="flex items-center gap-1.5 text-indigo-700 mb-2.5">
+                    <TrendingUp size={15} />
+                    <h3 className="text-[10px] font-extrabold uppercase tracking-widest">Ganancia</h3>
                   </div>
-                  <p className="text-xl font-black text-indigo-900">${totalGanancia.toLocaleString()}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl font-black text-indigo-900 leading-none tracking-tight">
+                    ${totalGanancia.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
                 </CardContent>
               </Card>
             </div>
