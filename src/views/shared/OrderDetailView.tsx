@@ -175,8 +175,9 @@ export default function OrderDetailView() {
 
   // Payment Selection Modal States
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mp' | 'transfer' | 'cash' | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mp' | 'transfer' | 'cash' | 'modo' | null>(null);
   const [mpSubOption, setMpSubOption] = useState<'link' | 'qr' | null>(null);
+  const [modoSubOption, setModoSubOption] = useState<'link' | 'qr' | null>(null);
   const [generatingPayment, setGeneratingPayment] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [isRealPayment, setIsRealPayment] = useState(false);
@@ -248,6 +249,55 @@ export default function OrderDetailView() {
     } catch (err: any) {
       console.error(err);
       setPaymentError(err?.message || 'Error desconocido.');
+    } finally {
+      setGeneratingPayment(false);
+    }
+  };
+
+  const handleGenerateModoPayment = async (subOption: 'link' | 'qr') => {
+    if (!order) return;
+    setGeneratingPayment(true);
+    setPaymentError(null);
+    setModoSubOption(subOption);
+    setGeneratedLink('');
+    
+    const totals = calculateTotals();
+    const returnUrl = window.location.href;
+
+    try {
+      const response = await fetch('/api/modo/preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          totalAmount: totals.total,
+          returnUrl
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al conectar con el servidor.');
+      }
+
+      const data = await response.json();
+      setGeneratedLink(data.initPoint);
+      setIsRealPayment(data.isReal);
+
+      // Now update the order status to "Pago Pendiente"
+      updateOrder(order.id, {
+        estado: 'Pago Pendiente',
+        metodoPago: 'QR',
+        linkPagoUrl: data.initPoint,
+        qrString: data.qrString || data.initPoint,
+        detallesPago: data.isReal ? 'MODO Real' : 'Simulación de MODO',
+        estadoPago: 'Pendiente'
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      setPaymentError(err?.message || 'Error de red al conectar con el servicio de MODO.');
     } finally {
       setGeneratingPayment(false);
     }
@@ -2498,6 +2548,23 @@ export default function OrderDetailView() {
 
                   <button 
                     onClick={() => {
+                      setSelectedPaymentMethod('modo');
+                      setModoSubOption(null);
+                      setGeneratedLink('');
+                    }}
+                    className="w-full flex items-center gap-4 p-4 border border-purple-100 rounded-xl hover:bg-purple-50/50 hover:border-purple-300 transition-all text-left group"
+                  >
+                    <div className="p-3 bg-purple-50 rounded-xl text-purple-600 group-hover:bg-purple-100 transition-all">
+                      <QrCode size={24} />
+                    </div>
+                    <div className="flex-1">
+                      <h5 className="font-bold text-slate-900 text-sm">Billetera MODO (Botón de Pago / QR)</h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Genera un botón de pago/deep-link para abrir directamente la app de MODO o un QR dinámico.</p>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={() => {
                       setSelectedPaymentMethod('transfer');
                       handleSelectTransfer();
                     }}
@@ -2534,12 +2601,150 @@ export default function OrderDetailView() {
                     onClick={() => {
                       setSelectedPaymentMethod(null);
                       setMpSubOption(null);
+                      setModoSubOption(null);
                       setGeneratedLink('');
                     }}
                     className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
                   >
                     ← Volver a métodos de pago
                   </button>
+
+                  {/* SUB VIEW: MODO */}
+                  {selectedPaymentMethod === 'modo' && (
+                    <div className="space-y-4">
+                      {!modoSubOption ? (
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button 
+                            onClick={() => handleGenerateModoPayment('link')}
+                            className="flex flex-col items-center justify-center p-5 border border-purple-100 rounded-xl hover:bg-purple-50/30 hover:border-purple-300 transition-all text-center group"
+                          >
+                            <ExternalLink size={32} className="text-purple-600 mb-2 group-hover:scale-105 transition-transform" />
+                            <span className="font-bold text-slate-900 text-xs uppercase tracking-wide">Botón de Pago MODO</span>
+                            <span className="text-[10px] text-slate-400 mt-1">Deep-link para celular / WhatsApp</span>
+                          </button>
+
+                          <button 
+                            onClick={() => handleGenerateModoPayment('qr')}
+                            className="flex flex-col items-center justify-center p-5 border border-purple-100 rounded-xl hover:bg-purple-50/30 hover:border-purple-300 transition-all text-center group"
+                          >
+                            <QrCode size={32} className="text-purple-600 mb-2 group-hover:scale-105 transition-transform" />
+                            <span className="font-bold text-slate-900 text-xs uppercase tracking-wide">Código QR MODO</span>
+                            <span className="text-[10px] text-slate-400 mt-1">Escanear en pantalla</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                              Billetera MODO: {modoSubOption === 'link' ? 'Deep-Link / Botón' : 'Código QR Dinámico'}
+                            </span>
+                            <Badge variant={isRealPayment ? "success" : "info"} className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 border-none">
+                              {isRealPayment ? "Producción" : "Simulación"}
+                            </Badge>
+                          </div>
+
+                          {generatingPayment ? (
+                            <div className="flex flex-col items-center justify-center py-8 space-y-2">
+                              <Loader2 className="animate-spin text-purple-600" size={32} />
+                              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest animate-pulse">Generando preferencia en MODO...</span>
+                            </div>
+                          ) : paymentError ? (
+                            <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-semibold text-center">
+                              ⚠️ Error: {paymentError}
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              {/* If Link Sub-Option */}
+                              {modoSubOption === 'link' && generatedLink && (
+                                <div className="space-y-3">
+                                  <p className="text-xs text-slate-600">Enlace de cobro MODO listo. Cópialo y envíaselo al paciente:</p>
+                                  <div className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                                    <input 
+                                      type="text" 
+                                      readOnly 
+                                      value={generatedLink}
+                                      className="text-xs text-slate-700 bg-transparent flex-1 select-all outline-none font-mono"
+                                    />
+                                    <button 
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'modo_link')}
+                                      className="p-2 text-purple-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+                                      title="Copiar Enlace"
+                                    >
+                                      {copiedField === 'modo_link' ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <Button 
+                                      className="bg-purple-600 hover:bg-purple-500 border-none font-bold text-[10px] uppercase tracking-wider py-3 shadow-md text-white flex items-center justify-center gap-1.5"
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'modo_link')}
+                                    >
+                                      {copiedField === 'modo_link' ? <Check size={14} /> : <Copy size={14} />} {copiedField === 'modo_link' ? '¡Copiado!' : 'Copiar para WhatsApp'}
+                                    </Button>
+                                    <Button 
+                                      variant="secondary"
+                                      className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3 flex items-center justify-center gap-1.5"
+                                      onClick={() => window.open(generatedLink, '_blank')}
+                                    >
+                                      <ExternalLink size={14} /> Abrir Checkout MODO
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* If QR Sub-Option */}
+                              {modoSubOption === 'qr' && generatedLink && (
+                                <div className="space-y-4 flex flex-col items-center">
+                                  <p className="text-xs text-slate-600 text-center">Código QR MODO listo. El paciente puede escanear este código para pagar con su saldo o tarjetas vinculadas:</p>
+                                  
+                                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center">
+                                    <img 
+                                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(generatedLink)}`}
+                                      alt="Código QR de Pago MODO"
+                                      className="w-44 h-44 select-none"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+
+                                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 text-left space-y-1 w-full">
+                                    <h6 className="text-purple-800 text-xs font-black flex items-center gap-1.5 uppercase tracking-wider">
+                                      ✨ ESCANEO CON CUALQUIER APP BANCARIA
+                                    </h6>
+                                    <p className="text-purple-700 text-[11px] leading-normal font-bold">
+                                      El paciente puede escanear este código usando el lector QR de MODO o el de su propia App Bancaria (Galicia, Santander, Macro, BBVA, BNA+, etc.).
+                                    </p>
+                                    <p className="text-purple-600 text-[10px] leading-normal">
+                                      Esto le permitirá seleccionar y pagar con cualquiera de sus tarjetas de crédito, débito o dinero en cuenta que tenga vinculadas en MODO, sin restricciones.
+                                    </p>
+                                  </div>
+
+                                  <div className="w-full text-center py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-[10px] font-bold text-slate-600 font-mono select-all">
+                                    ID: QR_MODO_{order.id}
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                                    <Button 
+                                      className="bg-purple-600 hover:bg-purple-500 border-none font-bold text-[10px] uppercase tracking-wider py-3 shadow-md text-white flex items-center justify-center gap-1.5"
+                                      onClick={() => handleCopyToClipboard(generatedLink, 'modo_qr_url')}
+                                    >
+                                      {copiedField === 'modo_qr_url' ? <Check size={14} /> : <Copy size={14} />} {copiedField === 'modo_qr_url' ? '¡Copiado!' : 'Copiar URL del QR'}
+                                    </Button>
+                                    <Button 
+                                      variant="secondary"
+                                      className="border border-slate-200 font-bold text-[10px] uppercase tracking-wider py-3 flex items-center justify-center gap-1.5"
+                                      onClick={() => setIsPaymentModalOpen(false)}
+                                    >
+                                      <CheckCircle size={14} /> Listo, Finalizar
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* SUB VIEW: MERCADO PAGO */}
                   {selectedPaymentMethod === 'mp' && (

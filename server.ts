@@ -505,6 +505,109 @@ async function startServer() {
   });
 
 
+  app.post('/api/modo/preference', async (req, res) => {
+    try {
+      const { orderId, totalAmount, returnUrl } = req.body;
+      if (!orderId || !totalAmount) {
+        return res.status(400).json({ error: 'Faltan datos requeridos (orderId o totalAmount).' });
+      }
+
+      // Fetch MODO credentials from Firestore config/main
+      let modoToken = '';
+      let modoMerchantId = '';
+      try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        let projectId = 'remixed-project-id';
+        let databaseId = '(default)';
+        if (fs.existsSync(configPath)) {
+          const configJson = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          projectId = configJson.projectId || projectId;
+          databaseId = configJson.firestoreDatabaseId || databaseId;
+        }
+
+        const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/config/main`;
+        const configResponse = await fetch(firestoreUrl);
+        if (configResponse.ok) {
+          const doc = await configResponse.json();
+          if (doc.fields) {
+            if (doc.fields.modoToken && doc.fields.modoToken.stringValue) {
+              modoToken = doc.fields.modoToken.stringValue;
+            }
+            if (doc.fields.modoMerchantId && doc.fields.modoMerchantId.stringValue) {
+              modoMerchantId = doc.fields.modoMerchantId.stringValue;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching MODO config from Firestore:', err);
+      }
+
+      if (modoToken && modoMerchantId) {
+        console.log(`Creating real MODO preference for Order #${orderId}, Amount: $${totalAmount}`);
+        
+        // Call MODO's official checkout API
+        const modoResponse = await fetch('https://api.modo.com.ar/b2b-intermediaries/v1/payment-intent', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${modoToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            amount: Number(totalAmount),
+            storeId: modoMerchantId,
+            externalId: orderId,
+            description: `Pedido #${orderId} - DALEDMED`,
+            callbackUrl: returnUrl,
+            title: "DALEDMED"
+          })
+        });
+
+        if (modoResponse.ok) {
+          const intentData = await modoResponse.json();
+          console.log('Real MODO intent created successfully:', intentData);
+          return res.json({
+            isReal: true,
+            initPoint: intentData.checkoutUrl || intentData.deeplink || `https://ecommerce.modo.com.ar/checkout/${intentData.id}`,
+            qrString: intentData.qrString || intentData.deeplink || `modo://payment?token=${intentData.id || orderId}`,
+            message: 'Intento de pago MODO creado con éxito.'
+          });
+        } else {
+          const errorData = await modoResponse.json().catch(() => null);
+          console.error('Error calling MODO API:', errorData);
+          
+          // High-fidelity fallback with simulated token
+          const mockIntentId = `intent_${orderId}_${Math.floor(Math.random()*1000000)}`;
+          const mockDeepLink = `modo://payment?token=${mockIntentId}`;
+          const mockCheckoutUrl = `https://play.modo.com.ar/detect-app?token=${mockIntentId}`;
+          
+          return res.json({
+            isReal: false,
+            initPoint: mockCheckoutUrl,
+            qrString: mockDeepLink,
+            message: 'Error de API MODO. Fallback a simulación de alta fidelidad.',
+            errorDetails: errorData
+          });
+        }
+      } else {
+        console.log(`No MODO credentials configured. Simulating preference for Order #${orderId}`);
+        const mockIntentId = `sim_modo_${orderId}_${Math.floor(Math.random()*1000000)}`;
+        const mockDeepLink = `modo://payment?token=${mockIntentId}`;
+        const mockCheckoutUrl = `https://play.modo.com.ar/detect-app?token=${mockIntentId}`;
+        
+        return res.json({
+          isReal: false,
+          initPoint: mockCheckoutUrl,
+          qrString: mockDeepLink,
+          message: 'Modo simulación (Sin credenciales de MODO)'
+        });
+      }
+    } catch (err: any) {
+      console.error('Error in /api/modo/preference:', err);
+      res.status(500).json({ error: err?.message || 'Error del servidor al crear preferencia de MODO.' });
+    }
+  });
+
+
   // --- PDF RECEIPT AND SMTP EMAIL INTEGRATION ---
 
   function parseFirestoreFields(fields: any): any {

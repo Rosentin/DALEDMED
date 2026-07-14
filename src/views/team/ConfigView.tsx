@@ -11,6 +11,8 @@ export default function ConfigView() {
     perKmLogisticsCost, 
     googleMapsApiKey, 
     mercadoPagoAccessToken,
+    modoToken,
+    modoMerchantId,
     bankName,
     bankCbu,
     bankAlias,
@@ -29,6 +31,8 @@ export default function ConfigView() {
   const [localPerKm, setLocalPerKm] = useState(perKmLogisticsCost.toString());
   const [localGoogleMapsApiKey, setLocalGoogleMapsApiKey] = useState(googleMapsApiKey || '');
   const [localMpAccessToken, setLocalMpAccessToken] = useState(mercadoPagoAccessToken || '');
+  const [localModoToken, setLocalModoToken] = useState(modoToken || '');
+  const [localModoMerchantId, setLocalModoMerchantId] = useState(modoMerchantId || '');
   const [localBankName, setLocalBankName] = useState(bankName || '');
   const [localBankCbu, setLocalBankCbu] = useState(bankCbu || '');
   const [localBankAlias, setLocalBankAlias] = useState(bankAlias || '');
@@ -51,6 +55,8 @@ export default function ConfigView() {
 
   useEffect(() => {
     if (mercadoPagoAccessToken !== undefined) setLocalMpAccessToken(mercadoPagoAccessToken);
+    if (modoToken !== undefined) setLocalModoToken(modoToken);
+    if (modoMerchantId !== undefined) setLocalModoMerchantId(modoMerchantId);
     if (bankName !== undefined) setLocalBankName(bankName);
     if (bankCbu !== undefined) setLocalBankCbu(bankCbu);
     if (bankAlias !== undefined) setLocalBankAlias(bankAlias);
@@ -62,7 +68,7 @@ export default function ConfigView() {
     if (smtpUser !== undefined) setLocalSmtpUser(smtpUser);
     if (smtpPass !== undefined) setLocalSmtpPass(smtpPass);
     if (smtpSendTo !== undefined) setLocalSmtpSendTo(smtpSendTo);
-  }, [mercadoPagoAccessToken, bankName, bankCbu, bankAlias, bankTitular, smtpHost, smtpPort, smtpSecure, smtpUser, smtpPass, smtpSendTo]);
+  }, [mercadoPagoAccessToken, modoToken, modoMerchantId, bankName, bankCbu, bankAlias, bankTitular, smtpHost, smtpPort, smtpSecure, smtpUser, smtpPass, smtpSendTo]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +77,8 @@ export default function ConfigView() {
     updateConfig('perKmLogisticsCost', Number(localPerKm));
     updateConfig('googleMapsApiKey', localGoogleMapsApiKey.trim());
     updateConfig('mercadoPagoAccessToken', localMpAccessToken.trim());
+    updateConfig('modoToken', localModoToken.trim());
+    updateConfig('modoMerchantId', localModoMerchantId.trim());
     updateConfig('bankName', localBankName.trim());
     updateConfig('bankCbu', localBankCbu.trim());
     updateConfig('bankAlias', localBankAlias.trim());
@@ -180,6 +188,33 @@ export default function ConfigView() {
             />
             <p className="text-xs text-slate-500 leading-relaxed font-medium">
               Ingresa tu Access Token de producción obtenido desde el panel de desarrolladores de Mercado Pago. Esto permitirá generar <b>Links de pago reales</b> y <b>QRs interoperables</b> con el monto exacto del pedido de tus pacientes. Si se deja en blanco, el sistema operará en modo simulación de alta fidelidad.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>MODO - Integración de Billetera Digital</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input 
+                label="API Token de MODO" 
+                type="password"
+                placeholder="Ej: eyJhbGciOi..."
+                value={localModoToken}
+                onChange={e => setLocalModoToken(e.target.value)}
+              />
+              <Input 
+                label="ID de Comercio (Merchant ID)" 
+                type="text"
+                placeholder="Ej: 12345"
+                value={localModoMerchantId}
+                onChange={e => setLocalModoMerchantId(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed font-medium">
+              Configura las credenciales provistas por MODO para habilitar el cobro directo mediante botón de pago de MODO o código QR dinámico. El botón iniciará un deep-link seguro para abrir directamente la app de MODO en dispositivos móviles y que el paciente complete el pago con sus tarjetas vinculadas. Si se deja vacío, funcionará en modo simulación de alta fidelidad.
             </p>
           </CardContent>
         </Card>

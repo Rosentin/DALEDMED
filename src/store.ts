@@ -132,6 +132,8 @@ interface AppState {
   perKmLogisticsCost: number;
   googleMapsApiKey?: string;
   mercadoPagoAccessToken?: string;
+  modoToken?: string;
+  modoMerchantId?: string;
   bankName?: string;
   bankCbu?: string;
   bankAlias?: string;
@@ -191,6 +193,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   perKmLogisticsCost: 200,
   googleMapsApiKey: '',
   mercadoPagoAccessToken: '',
+  modoToken: '',
+  modoMerchantId: '',
   bankName: '',
   bankCbu: '',
   bankAlias: '',
