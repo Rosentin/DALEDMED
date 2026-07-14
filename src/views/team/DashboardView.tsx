@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { OrderState, Order } from '../../types';
+import DashboardCharts from '../../components/DashboardCharts';
 
 const GOOGLE_MAPS_SCRIPT_ID = 'google-maps-api-script';
 
@@ -1100,6 +1101,9 @@ export default function DashboardView() {
               </div>
             </div>
           </div>
+
+          {/* Professional Interactive Analytics Charts */}
+          <DashboardCharts orders={allOrders} />
 
           {/* Income Concept Quickview & Visual Distribution */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
